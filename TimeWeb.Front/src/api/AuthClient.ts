@@ -7,7 +7,9 @@ import type {
   ApiError
 } from './AuthTypes';
 
-const API_BASE = 'http://localhost:8081/v1/auth';
+import { config } from '../config/env';
+
+const API_BASE = config.apiBaseUrl;
 const STORAGE_KEY = 'app_session';
 const REQUEST_TIMEOUT = 10000; // 10 секунд
 
@@ -25,7 +27,6 @@ function createApiError(response: Response | null, body: ApiErrorResponse): ApiE
   };
 }
 
-// Функция для выполнения fetch с таймаутом
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = REQUEST_TIMEOUT): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -61,7 +62,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const authClient = {
   signUp: async (data: SignUpRequest): Promise<SignUpResponse> => {
-    const response = await fetchWithTimeout(`${API_BASE}/sign-up`, {
+    const response = await fetchWithTimeout(`${API_BASE}/v1/auth/sign-up`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -70,7 +71,7 @@ export const authClient = {
   },
 
   signIn: async (data: SignInRequest): Promise<SignInResponse> => {
-    const response = await fetchWithTimeout(`${API_BASE}/sign-in`, {
+    const response = await fetchWithTimeout(`${API_BASE}/v1/auth/sign-in`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
