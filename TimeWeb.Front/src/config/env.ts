@@ -1,17 +1,23 @@
 export interface AppConfig {
-  apiBaseUrl: string;
+  usersApiUrl: string;
+  friendsApiUrl: string;
   appName: string;
   isDevelopment: boolean;
   isProduction: boolean;
 }
 
 export const config: AppConfig = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+  usersApiUrl: import.meta.env.VITE_USERS_API_URL,
+  friendsApiUrl: import.meta.env.VITE_FRIENDS_API_URL,
   appName: import.meta.env.VITE_APP_NAME,
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
 };
 
-if (!config.apiBaseUrl) {
-  console.error('❌ VITE_API_BASE_URL не настроен!');
+if (!config.usersApiUrl) {
+  console.error('❌ VITE_USERS_API_URL не настроен!');
+}
+
+if (!config.friendsApiUrl) {
+  console.error('❌ VITE_FRIENDS_API_URL не настроен!');
 }

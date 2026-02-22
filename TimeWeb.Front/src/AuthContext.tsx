@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { authClient } from './api/AuthClient';
-import type { UserSession } from './api/AuthClient';
-import type { ApiError } from './api/AuthTypes';
+import { usersClient } from './api/users/UsersClient';
+import type { UserSession } from './api/users/UsersClient';
+import type { ApiError } from './api/ApiError';
 
 interface AuthContextType {
   user: UserSession | null;
@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [lastError, setLastError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    const session = authClient.getSession();
+    const session = usersClient.getSession();
     setUser(session);
     setIsLoading(false);
   }, []);
@@ -34,12 +34,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLastError(null);
     setIsSubmitting(true);
     try {
-      const response = await authClient.signIn({ username, password });
+      const response = await usersClient.signIn({ username, password });
       const session: UserSession = {
         token: response.token,
         name: username 
       };
-      authClient.setSession(session);
+      usersClient.setSession(session);
       setUser(session);
     } catch (err: any) {
       if (!err.getFieldError) {
@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLastError(null);
     setIsSubmitting(true);
     try {
-      await authClient.signUp({ name, password });
+      await usersClient.signUp({ name, password });
     } catch (err: any) {
       if (!err.getFieldError) {
         setLastError({
@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    authClient.clearSession();
+    usersClient.clearSession();
     setUser(null);
   };
 
