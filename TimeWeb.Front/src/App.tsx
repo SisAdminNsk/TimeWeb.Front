@@ -8,7 +8,31 @@ import { DashboardPage } from './pages/DashboardPage';
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
   
-  if (isLoading) return <div>Загрузка...</div>;
+  if (isLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh',
+        backgroundColor: '#f5f7fa'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ 
+            width: '40px', 
+            height: '40px', 
+            border: '4px solid #e0e0e0',
+            borderTop: '4px solid #667eea',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <div style={{ color: '#666', fontSize: '14px' }}>Загрузка...</div>
+        </div>
+      </div>
+    );
+  }
+  
   if (!isAuthenticated) return <Navigate to="/" replace />;
   
   return children;

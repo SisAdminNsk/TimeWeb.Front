@@ -55,13 +55,5 @@ export const usersClient = {
   
   clearSession: (): void => {
     localStorage.removeItem(STORAGE_KEY);
-  },
-  
-  getAuthHeader: (): HeadersInit | undefined => {
-    const session = usersClient.getSession();
-    if (session?.token) {
-      return { 'Authorization': `Bearer ${session.token}` };
-    }
-    return undefined;
   }
 };

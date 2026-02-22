@@ -6,7 +6,7 @@ import type {
   GetFriendListResponse
 } from './FriendsContracts';
 import { config } from '../../config/env';
-import { fetchWithTimeout, handleResponse, getAuthHeaders } from '../HttpClient';
+import { fetchWithTimeout, handleResponse, STORAGE_KEY } from '../HttpClient';
 
 const API_BASE = config.friendsApiUrl;
 
@@ -14,7 +14,7 @@ export const friendsClient = {
   sendInvite: async (recipientId: string): Promise<FriendshipInviteDto> => {
     const response = await fetchWithTimeout(`${API_BASE}/v1/invites`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
       body: JSON.stringify({ recipientId } as SendFriendshipInviteRequest),
     });
     return handleResponse<FriendshipInviteDto>(response);
@@ -23,7 +23,7 @@ export const friendsClient = {
   acceptInvite: async (inviteId: string): Promise<FriendshipDto> => {
     const response = await fetchWithTimeout(`${API_BASE}/v1/invites/${inviteId}/accept`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
     });
     return handleResponse<FriendshipDto>(response);
   },
@@ -31,7 +31,7 @@ export const friendsClient = {
   declineInvite: async (inviteId: string): Promise<FriendshipInviteDto> => {
     const response = await fetchWithTimeout(`${API_BASE}/v1/invites/${inviteId}/decline`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
     });
     return handleResponse<FriendshipInviteDto>(response);
   },
@@ -48,7 +48,7 @@ export const friendsClient = {
     });
     const response = await fetchWithTimeout(`${API_BASE}/v1/invites?${params}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
     });
     return handleResponse<GetFriendshipInviteListResponse>(response);
   },
@@ -63,7 +63,7 @@ export const friendsClient = {
     });
     const response = await fetchWithTimeout(`${API_BASE}/v1/friends?${params}`, {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
     });
     return handleResponse<GetFriendListResponse>(response);
   },
@@ -71,8 +71,23 @@ export const friendsClient = {
   removeFriend: async (friendId: string): Promise<FriendshipDto> => {
     const response = await fetchWithTimeout(`${API_BASE}/v1/friends/${friendId}/remove`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
     });
     return handleResponse<FriendshipDto>(response);
   },
 };
+
+/**
+ * Получает заголовки авторизации из localStorage
+ */
+export function getHeaders(): HeadersInit {
+  const session = localStorage.getItem(STORAGE_KEY);
+  if (session) {
+    const { token } = JSON.parse(session);
+    return { 
+      'Authorization': `Bearer ${token}`, 
+      'Content-Type': 'application/json' 
+    };
+  }
+  return { 'Content-Type': 'application/json' };
+}

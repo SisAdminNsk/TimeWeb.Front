@@ -59,21 +59,6 @@ export async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 /**
- * Получает заголовки авторизации из localStorage
- */
-export function getAuthHeaders(): HeadersInit {
-  const session = localStorage.getItem(STORAGE_KEY);
-  if (session) {
-    const { token } = JSON.parse(session);
-    return { 
-      'Authorization': `Bearer ${token}`, 
-      'Content-Type': 'application/json' 
-    };
-  }
-  return { 'Content-Type': 'application/json' };
-}
-
-/**
  * Получает токен из сессии
  */
 export function getAuthToken(): string | null {

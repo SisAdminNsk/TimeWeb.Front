@@ -1,5 +1,7 @@
 import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { FriendsProvider } from '../FriendsContext';
+import { FriendsWidget } from '../FriendsWidget';
 
 export const DashboardPage = () => {
   const { user, logout } = useAuth();
@@ -10,18 +12,127 @@ export const DashboardPage = () => {
     navigate('/');
   };
 
-  if (!user) return null; // Или редирект через ProtectedRoute
+  if (!user) return null;
 
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px', border: '1px solid #4CAF50' }}>
-      <h2>Личный кабинет</h2>
-      <p>Добро пожаловать, <strong>{user.name}</strong>!</p>
-      <p>Ваш токен (начало): <code>{user.token.substring(0, 20)}...</code></p>
-      
-      <div style={{ marginTop: '20px' }}>
-        <button onClick={handleLogout} style={{ padding: '10px 20px', background: '#f44336', color: 'white', border: 'none' }}>
+    <div style={{ 
+      maxWidth: '1200px', 
+      margin: '0 auto', 
+      padding: '20px',
+      minHeight: '100vh',
+      backgroundColor: '#f5f7fa'
+    }}>
+      {/* Заголовок страницы */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '30px',
+        padding: '20px',
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+      }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '24px', color: '#333' }}>
+            Личный кабинет
+          </h1>
+          <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '14px' }}>
+            Добро пожаловать, <strong>{user.name}</strong>!
+          </p>
+        </div>
+        <button 
+          onClick={handleLogout} 
+          style={{ 
+            padding: '10px 20px', 
+            background: '#f44336', 
+            color: 'white', 
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 500,
+            transition: 'background 0.2s'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.background = '#d32f2f'}
+          onMouseOut={(e) => e.currentTarget.style.background = '#f44336'}
+        >
           Выйти
         </button>
+      </div>
+
+      {/* Основной контент с виджетом */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: '1fr 400px', 
+        gap: '20px',
+        alignItems: 'start'
+      }}>
+        {/* Левая колонка - основная информация */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '24px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          minHeight: '400px'
+        }}>
+          <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#333' }}>
+            Информация о профиле
+          </h2>
+          
+          <div style={{ display: 'grid', gap: '16px' }}>
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: '#f8f9fa', 
+              borderRadius: '6px',
+              border: '1px solid #e9ecef'
+            }}>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+                Имя пользователя
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: '#333' }}>
+                {user.name}
+              </div>
+            </div>
+            
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: '#f8f9fa', 
+              borderRadius: '6px',
+              border: '1px solid #e9ecef'
+            }}>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+                Токен авторизации
+              </div>
+              <div style={{ 
+                fontSize: '12px', 
+                fontFamily: 'monospace', 
+                color: '#666',
+                wordBreak: 'break-all'
+              }}>
+                {user.token.substring(0, 50)}...
+              </div>
+            </div>
+            
+            <div style={{ 
+              padding: '16px', 
+              backgroundColor: '#e8f5e9', 
+              borderRadius: '6px',
+              border: '1px solid #c8e6c9'
+            }}>
+              <div style={{ fontSize: '12px', color: '#2e7d32', marginBottom: '4px' }}>
+                Статус аккаунта
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 500, color: '#2e7d32' }}>
+                Активен
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Правая колонка - виджет друзей */}
+        <FriendsProvider>
+          <FriendsWidget />
+        </FriendsProvider>
       </div>
     </div>
   );
