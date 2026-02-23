@@ -1,0 +1,216 @@
+import React from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../AuthContext';
+import { theme } from '../styles/theme';
+
+export const LayoutPage = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { colors, typography, spacing, borderRadius, transitions, shadows} = theme;
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const containerStyle: React.CSSProperties = {
+    display: 'flex',
+    minHeight: '100vh',
+    backgroundColor: colors.gray100,
+  };
+
+  const sidebarStyle: React.CSSProperties = {
+    width: '280px',
+    backgroundColor: colors.sidebar.bg,
+    color: colors.sidebar.text,
+    display: 'flex',
+    flexDirection: 'column',
+    padding: spacing.lg,
+    position: 'fixed' as const,
+    height: '100vh',
+    left: 0,
+    top: 0,
+    boxShadow: shadows.lg,
+    zIndex: 1000,
+  };
+
+  const logoStyle: React.CSSProperties = {
+    marginBottom: spacing['2xl'],
+    paddingLeft: spacing.sm,
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.sm,
+  };
+
+  const logoIconStyle: React.CSSProperties = {
+    width: '40px',
+    height: '40px',
+    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
+    borderRadius: borderRadius.md,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '20px',
+  };
+
+  const logoTextStyle: React.CSSProperties = {
+    margin: 0,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.sidebar.text,
+  };
+
+  const logoSubStyle: React.CSSProperties = {
+    fontSize: typography.fontSize.xs,
+    color: colors.sidebar.textMuted,
+    marginTop: spacing.xs,
+  };
+
+  const navStyle: React.CSSProperties = {
+    flex: 1,
+  };
+
+  const navItemStyle = (path: string): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: `${spacing.sm} ${spacing.md}`,
+    color: location.pathname === path ? colors.white : colors.sidebar.textMuted,
+    backgroundColor: location.pathname === path ? colors.sidebar.active : 'transparent',
+    borderRadius: borderRadius.md,
+    textDecoration: 'none',
+    marginBottom: spacing.xs,
+    transition: `all ${transitions.normal}`,
+    fontWeight: location.pathname === path ? typography.fontWeight.semibold : typography.fontWeight.normal,
+    fontSize: typography.fontSize.sm,
+  });
+
+  const userProfileStyle: React.CSSProperties = {
+    borderTop: `1px solid ${colors.sidebar.border}`,
+    paddingTop: spacing.lg,
+    marginTop: 'auto',
+  };
+
+  const userInfoStyle: React.CSSProperties = {
+    marginBottom: spacing.md,
+    paddingLeft: spacing.sm,
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.sm,
+  };
+
+  const avatarStyle: React.CSSProperties = {
+    width: '36px',
+    height: '36px',
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: colors.white,
+    fontWeight: typography.fontWeight.semibold,
+    fontSize: typography.fontSize.sm,
+  };
+
+  const userNameStyle: React.CSSProperties = {
+    fontSize: typography.fontSize.sm,
+    color: colors.sidebar.text,
+    fontWeight: typography.fontWeight.semibold,
+  };
+
+  const userStatusStyle: React.CSSProperties = {
+    fontSize: typography.fontSize.xs,
+    color: colors.sidebar.textMuted,
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+  };
+
+  const logoutButtonStyle: React.CSSProperties = {
+    width: '100%',
+    padding: `${spacing.sm} ${spacing.md}`,
+    backgroundColor: 'transparent',
+    border: `1px solid ${colors.error}`,
+    color: colors.error,
+    borderRadius: borderRadius.md,
+    cursor: 'pointer',
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    transition: `all ${transitions.normal}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  };
+
+  const mainStyle: React.CSSProperties = {
+    marginLeft: '280px',
+    width: 'calc(100% - 280px)',
+    padding: spacing.xl,
+    minHeight: '100vh',
+  };
+
+  return (
+    <div style={containerStyle}>
+      <aside style={sidebarStyle}>
+        <div style={logoStyle}>
+          <div style={logoIconStyle}>🎯</div>
+          <div>
+            <h2 style={logoTextStyle}>TimeWeb</h2>
+            <div style={logoSubStyle}>Версия 1.0</div>
+          </div>
+        </div>
+
+        <nav style={navStyle}>
+          <Link to="/dashboard" style={navItemStyle('/dashboard')}>
+            Личный кабинет
+          </Link>
+          <Link to="/dashboard/events" style={navItemStyle('/dashboard/events')}>
+            Календарь мероприятий
+          </Link>
+        </nav>
+
+        <div style={userProfileStyle}>
+          <div style={userInfoStyle}>
+            <div style={avatarStyle}>
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div>
+              <div style={userNameStyle}>{user?.name}</div>
+              <div style={userStatusStyle}>
+                <span style={{ 
+                  width: '6px', 
+                  height: '6px', 
+                  backgroundColor: colors.success, 
+                  borderRadius: '50%',
+                  display: 'inline-block'
+                }} />
+                Онлайн
+              </div>
+            </div>
+          </div>
+          
+          <button 
+            onClick={handleLogout}
+            style={logoutButtonStyle}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = colors.error;
+              e.currentTarget.style.color = colors.white;
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = colors.error;
+            }}
+          >
+            Выйти
+          </button>
+        </div>
+      </aside>
+
+      <main style={mainStyle}>
+        <Outlet />
+      </main>
+    </div>
+  );
+};

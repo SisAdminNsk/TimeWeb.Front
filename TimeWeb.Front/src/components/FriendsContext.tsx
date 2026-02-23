@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { friendsClient } from './api/friends/FriendsClient';
-import { usersClient } from './api/users/UsersClient';
-import type { FriendshipInviteDto, FriendshipDto } from './api/friends/FriendsContracts';
-import type { ApiError } from './api/ApiError';
+import { friendsClient } from '../api/friends/FriendsClient';
+import { usersClient } from '../api/users/UsersClient';
+import type { FriendshipInviteDto, FriendshipDto } from '../api/friends/FriendsContracts';
+import type { ApiError } from '../api/ApiError';
 
-export const PAGE_SIZE = 5;
+export const PAGE_SIZE = 20;
 
 interface Notification {
   type: 'success' | 'error' | 'info';

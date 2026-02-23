@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFriends } from './FriendsContext';
+import { theme } from '../styles/theme';
 
 type TabType = 'friends' | 'incoming' | 'outgoing' | 'add';
 
@@ -139,194 +140,245 @@ export const FriendsWidget = () => {
     return `Друг (${friend.friendId?.substring(0, 8)}...)`;
   };
 
+
+  const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
+
   const styles = {
     widget: {
-      border: '1px solid #e0e0e0',
-      borderRadius: '8px',
-      backgroundColor: '#fff',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      border: `1px solid ${colors.gray200}`,
+      borderRadius: borderRadius.lg,
+      backgroundColor: colors.white,
+      boxShadow: shadows.md,
       width: '100%',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: typography.fontFamily,
       overflow: 'hidden',
+      animation: 'fadeIn 0.4s ease-out',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      height: '100%',
+      minHeight: '400px',
     } as React.CSSProperties,
+    
     header: {
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      padding: '14px 18px',
-      fontSize: '16px',
-      fontWeight: 600,
+      background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
+      color: colors.white,
+      padding: `${spacing.md} ${spacing.lg}`,
+      fontSize: typography.fontSize.base,
+      fontWeight: typography.fontWeight.semibold,
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
+      flexShrink: 0,
     } as React.CSSProperties,
+    
     headerLeft: {
       display: 'flex',
       alignItems: 'center',
-      gap: '10px',
+      gap: spacing.sm,
     } as React.CSSProperties,
+    
     headerButton: {
       background: 'rgba(255, 255, 255, 0.15)',
       border: '1px solid rgba(255, 255, 255, 0.3)',
-      borderRadius: '8px',
-      padding: '6px 14px',
-      color: 'white',
+      borderRadius: borderRadius.md,
+      padding: `${spacing.xs} ${spacing.md}`,
+      color: colors.white,
       cursor: 'pointer',
-      fontSize: '13px',
-      fontWeight: 500,
+      fontSize: typography.fontSize.xs,
+      fontWeight: typography.fontWeight.medium,
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
-      transition: 'all 0.2s',
+      gap: spacing.xs,
+      transition: `all ${transitions.normal}`,
       backdropFilter: 'blur(4px)',
+      outline: 'none',
     } as React.CSSProperties,
+    
     tabs: {
       display: 'flex',
-      borderBottom: '1px solid #e0e0e0',
-      backgroundColor: '#fafafa',
+      borderBottom: `1px solid ${colors.gray200}`,
+      backgroundColor: colors.gray50,
+      flexShrink: 0,
     } as React.CSSProperties,
-    tab: (isActive: boolean) => ({
+    
+    tab: (isActive: boolean): React.CSSProperties => ({
       flex: 1,
-      padding: '12px 8px',
+      padding: `${spacing.sm} ${spacing.md}`,
       border: 'none',
-      background: isActive ? 'white' : 'transparent',
-      borderBottom: isActive ? '2px solid #667eea' : '2px solid transparent',
+      background: isActive ? colors.white : 'transparent',
+      borderBottom: isActive ? `2px solid ${colors.primary}` : '2px solid transparent',
       cursor: 'pointer',
-      fontWeight: isActive ? 600 : 400,
-      fontSize: '13px',
-      transition: 'all 0.2s',
-      color: isActive ? '#667eea' : '#666',
-    } as React.CSSProperties),
+      fontWeight: isActive ? typography.fontWeight.semibold : typography.fontWeight.normal,
+      fontSize: typography.fontSize.sm,
+      transition: `all ${transitions.normal}`,
+      color: isActive ? colors.primary : colors.gray500,
+      outline: 'none',
+    }),
+    
     content: {
-      padding: '16px',
-      maxHeight: '400px',
+      padding: spacing.lg,
+      flex: 1,
       overflowY: 'auto' as const,
+      overflowX: 'hidden' as const,
+      scrollbarWidth: 'thin',
+      scrollbarColor: `${colors.gray300} ${colors.gray50}`,
     } as React.CSSProperties,
+    
     item: {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '12px',
-      borderBottom: '1px solid #f0f0f0',
-      transition: 'background 0.2s',
+      padding: `${spacing.md} ${spacing.lg}`,
+      borderBottom: `1px solid ${colors.gray100}`,
+      transition: `background ${transitions.fast}`,
     } as React.CSSProperties,
+    
     itemName: {
-      fontWeight: 500,
-      fontSize: '14px',
-      color: '#333',
+      fontWeight: typography.fontWeight.medium,
+      fontSize: typography.fontSize.sm,
+      color: colors.gray900,
     } as React.CSSProperties,
+    
     itemMeta: {
-      fontSize: '11px',
-      color: '#888',
-      marginTop: '4px',
+      fontSize: typography.fontSize.xs,
+      color: colors.gray400,
+      marginTop: spacing.xs,
     } as React.CSSProperties,
+    
     buttonGroup: {
       display: 'flex',
-      gap: '6px',
+      gap: spacing.xs,
     } as React.CSSProperties,
-    button: (variant: 'primary' | 'success' | 'danger' | 'secondary' | 'pagination', disabled: boolean = false) => ({
-      padding: variant === 'pagination' ? '6px 12px' : '6px 10px',
-      borderRadius: '4px',
+    
+    button: (variant: 'primary' | 'success' | 'danger' | 'secondary' | 'pagination', disabled: boolean = false): React.CSSProperties => ({
+      padding: variant === 'pagination' ? `${spacing.xs} ${spacing.sm}` : `${spacing.xs} ${spacing.sm}`,
+      borderRadius: borderRadius.sm,
       cursor: disabled ? 'not-allowed' : 'pointer',
-      fontSize: '12px',
-      fontWeight: 500,
-      backgroundColor: disabled ? '#ccc' 
-        : variant === 'primary' ? '#667eea' 
-        : variant === 'success' ? '#28a745' 
-        : variant === 'danger' ? '#dc3545' 
-        : variant === 'pagination' ? '#f8f9fa'
-        : '#6c757d',
-      color: variant === 'pagination' ? '#333' : 'white',
-      border: variant === 'pagination' ? '1px solid #ddd' : 'none',
-      transition: 'all 0.2s',
+      fontSize: typography.fontSize.xs,
+      fontWeight: typography.fontWeight.medium,
+      backgroundColor: disabled ? colors.gray300 
+        : variant === 'primary' ? colors.primary 
+        : variant === 'success' ? colors.success 
+        : variant === 'danger' ? colors.error 
+        : variant === 'pagination' ? colors.gray50
+        : colors.gray500,
+      color: variant === 'pagination' ? colors.gray700 : colors.white,
+      border: variant === 'pagination' ? `1px solid ${colors.gray300}` : 'none',
+      transition: `all ${transitions.normal}`,
       opacity: disabled ? 0.6 : 1,
-    } as React.CSSProperties),
+      outline: 'none',
+    }),
+    
     input: {
       width: '100%',
-      padding: '10px',
-      border: '1px solid #ddd',
-      borderRadius: '4px',
-      fontSize: '14px',
-      marginBottom: '10px',
+      padding: `${spacing.sm} ${spacing.md}`,
+      border: `1px solid ${colors.gray300}`,
+      borderRadius: borderRadius.md,
+      fontSize: typography.fontSize.sm,
+      marginBottom: spacing.sm,
       boxSizing: 'border-box' as const,
+      transition: `all ${transitions.fast}`,
     } as React.CSSProperties,
+    
     error: {
-      color: '#dc3545',
-      fontSize: '12px',
-      padding: '8px',
-      backgroundColor: '#ffe6e6',
-      borderRadius: '4px',
-      marginBottom: '12px',
+      color: colors.errorDark,
+      fontSize: typography.fontSize.xs,
+      padding: spacing.sm,
+      backgroundColor: colors.errorLight,
+      borderRadius: borderRadius.sm,
+      marginBottom: spacing.md,
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
+      border: `1px solid ${colors.error}`,
     } as React.CSSProperties,
-    notification: (type: 'success' | 'error' | 'info') => ({
-      padding: '10px 14px',
-      borderRadius: '6px',
-      marginBottom: '12px',
-      fontSize: '13px',
+    
+    notification: (type: 'success' | 'error' | 'info'): React.CSSProperties => ({
+      padding: `${spacing.sm} ${spacing.md}`,
+      borderRadius: borderRadius.md,
+      marginBottom: spacing.md,
+      fontSize: typography.fontSize.sm,
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      gap: '10px',
-      backgroundColor: type === 'success' ? '#d4edda' 
-        : type === 'error' ? '#f8d7da' 
-        : '#d1ecf1',
-      color: type === 'success' ? '#155724' 
-        : type === 'error' ? '#721c24' 
-        : '#0c5460',
-      border: `1px solid ${type === 'success' ? '#c3e6cb' 
-        : type === 'error' ? '#f5c6cb' 
-        : '#bee5eb'}`,
-    } as React.CSSProperties),
+      gap: spacing.sm,
+      backgroundColor: type === 'success' ? colors.successLight 
+        : type === 'error' ? colors.errorLight 
+        : colors.infoLight,
+      color: type === 'success' ? colors.successDark 
+        : type === 'error' ? colors.errorDark 
+        : colors.infoDark,
+      border: `1px solid ${type === 'success' ? colors.success 
+        : type === 'error' ? colors.error 
+        : colors.info}`,
+    }),
+    
     empty: {
       textAlign: 'center' as const,
-      color: '#888',
-      padding: '30px 10px',
-      fontSize: '14px',
+      color: colors.gray400,
+      padding: `${spacing.xl} ${spacing.md}`,
+      fontSize: typography.fontSize.sm,
     } as React.CSSProperties,
-    badge: (count: number) => ({
-      backgroundColor: count > 0 ? '#dc3545' : '#e0e0e0',
-      color: count > 0 ? 'white' : '#888',
-      borderRadius: '10px',
-      padding: '2px 6px',
-      fontSize: '11px',
-      marginLeft: '6px',
-      fontWeight: 600,
-    } as React.CSSProperties),
+    
+    badge: (count: number): React.CSSProperties => ({
+      backgroundColor: count > 0 ? colors.error : colors.gray300,
+      color: count > 0 ? colors.white : colors.gray500,
+      borderRadius: borderRadius.full,
+      padding: `${spacing.xs} ${spacing.sm}`,
+      fontSize: typography.fontSize.xs,
+      marginLeft: spacing.xs,
+      fontWeight: typography.fontWeight.semibold,
+    }),
+    
     loading: {
       textAlign: 'center' as const,
-      padding: '30px',
-      color: '#888',
-      fontSize: '14px',
+      padding: spacing.xl,
+      color: colors.gray400,
+      fontSize: typography.fontSize.sm,
     } as React.CSSProperties,
+    
     sectionHeader: {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: '12px',
+      marginBottom: spacing.md,
     } as React.CSSProperties,
+    
     paginationContainer: {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      gap: '10px',
-      marginTop: '16px',
-      paddingTop: '12px',
-      borderTop: '1px solid #f0f0f0',
+      gap: spacing.sm,
+      marginTop: spacing.lg,
+      paddingTop: spacing.md,
+      borderTop: `1px solid ${colors.gray100}`,
     } as React.CSSProperties,
+    
     pageInfo: {
-      fontSize: '12px',
-      color: '#666',
+      fontSize: typography.fontSize.xs,
+      color: colors.gray500,
       minWidth: '80px',
       textAlign: 'center' as const,
     } as React.CSSProperties,
-    refreshIcon: (isRefreshing: boolean) => ({
-      width: '16px',
-      height: '16px',
+    
+    refreshIcon: (isRefreshing: boolean): React.CSSProperties => ({
+      width: '14px',
+      height: '14px',
       display: 'inline-block',
       animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
-    } as React.CSSProperties),
+    }),
+    
+    sectionTitle: {
+      margin: 0,
+      fontSize: typography.fontSize.sm,
+      fontWeight: typography.fontWeight.semibold,
+      color: colors.gray900,
+    } as React.CSSProperties,
+    
+    sectionCount: {
+      fontSize: typography.fontSize.xs,
+      color: colors.gray400,
+    } as React.CSSProperties,
   };
 
   const friendsList = Array.isArray(friends) ? friends : [];
@@ -369,8 +421,8 @@ export const FriendsWidget = () => {
     return (
       <div>
         <div style={styles.sectionHeader}>
-          <h3 style={{ margin: 0, fontSize: '15px', color: '#333' }}>Друзья</h3>
-          <span style={{ fontSize: '12px', color: '#888' }}>
+          <h3 style={styles.sectionTitle}>Друзья</h3>
+          <span style={styles.sectionCount}>
             {friendsTotalCount > 0 ? `Всего: ${friendsTotalCount}` : '0'}
           </span>
         </div>
@@ -404,8 +456,8 @@ export const FriendsWidget = () => {
   const renderIncomingInvites = () => (
     <div>
       <div style={styles.sectionHeader}>
-        <h3 style={{ margin: 0, fontSize: '15px', color: '#333' }}>Входящие заявки</h3>
-        <span style={{ fontSize: '12px', color: '#888' }}>{incomingTotalCount}</span>
+        <h3 style={styles.sectionTitle}>Входящие заявки</h3>
+        <span style={styles.sectionCount}>{incomingTotalCount}</span>
       </div>
       {incomingList.length === 0 ? (
         <div style={styles.empty}>Нет входящих заявок</div>
@@ -423,6 +475,7 @@ export const FriendsWidget = () => {
                 style={styles.button('success', isLoading || isRefreshingAll)}
                 onClick={() => handleAcceptInvite(invite.id)}
                 disabled={isLoading || isRefreshingAll}
+                title="Принять"
               >
                 ✓
               </button>
@@ -430,6 +483,7 @@ export const FriendsWidget = () => {
                 style={styles.button('danger', isLoading || isRefreshingAll)}
                 onClick={() => handleDeclineInvite(invite.id)}
                 disabled={isLoading || isRefreshingAll}
+                title="Отклонить"
               >
                 ✕
               </button>
@@ -445,8 +499,8 @@ export const FriendsWidget = () => {
   const renderOutgoingInvites = () => (
     <div>
       <div style={styles.sectionHeader}>
-        <h3 style={{ margin: 0, fontSize: '15px', color: '#333' }}>Исходящие заявки</h3>
-        <span style={{ fontSize: '12px', color: '#888' }}>{outgoingTotalCount}</span>
+        <h3 style={styles.sectionTitle}>Исходящие заявки</h3>
+        <span style={styles.sectionCount}>{outgoingTotalCount}</span>
       </div>
       {outgoingList.length === 0 ? (
         <div style={styles.empty}>Нет исходящих заявок</div>
@@ -476,7 +530,7 @@ export const FriendsWidget = () => {
 
   const renderAddFriend = () => (
     <div>
-      <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#333' }}>
+      <h3 style={{ ...styles.sectionTitle, marginBottom: spacing.md }}>
         Добавить друга
       </h3>
       
@@ -488,10 +542,18 @@ export const FriendsWidget = () => {
           onChange={(e) => setUsernameInput(e.target.value)}
           style={styles.input}
           disabled={isLoading}
+          onFocus={(e) => e.target.style.borderColor = colors.primary}
+          onBlur={(e) => e.target.style.borderColor = colors.gray300}
         />
         <button
           type="submit"
-          style={{ ...styles.button('primary', isLoading || !usernameInput.trim()), width: '100%' }}
+          style={{ 
+            ...styles.button('primary', isLoading || !usernameInput.trim()), 
+            width: '100%',
+            padding: `${spacing.md} ${spacing.lg}`,
+            fontSize: typography.fontSize.base,
+            fontWeight: typography.fontWeight.semibold,
+          }}
           disabled={isLoading || !usernameInput.trim()}
         >
           {isLoading ? 'Отправка...' : 'Отправить заявку'}
@@ -504,7 +566,8 @@ export const FriendsWidget = () => {
     <div style={styles.widget}>
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          <span>👥 Друзья</span>
+          <span>👥</span>
+          <span>Друзья</span>
         </div>
         <button
           onClick={handleRefreshAll}
@@ -583,7 +646,7 @@ export const FriendsWidget = () => {
             </span>
             <button
               onClick={clearNotification}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '0 4px', color: 'inherit', outline: 'none' }}
             >
               ✕
             </button>
@@ -595,7 +658,7 @@ export const FriendsWidget = () => {
             <span>⚠️ {getErrorMessage()}</span>
             <button
               onClick={clearError}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc3545', fontSize: '16px', padding: '0 4px' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: '16px', padding: '0 4px', outline: 'none' }}
             >
               ✕
             </button>
@@ -619,7 +682,43 @@ export const FriendsWidget = () => {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .friends-widget button:focus {
+          outline: none !important;
+        }
+        
+        /* ✅ Кастомный скроллбар для контента виджета */
+        .friends-widget-content::-webkit-scrollbar {
+          width: 6px;
+        }
+        
+        .friends-widget-content::-webkit-scrollbar-track {
+          background: #f9fafb;
+          border-radius: 3px;
+        }
+        
+        .friends-widget-content::-webkit-scrollbar-thumb {
+          background: #d1d5db;
+          border-radius: 3px;
+        }
+        
+        .friends-widget-content::-webkit-scrollbar-thumb:hover {
+          background: #9ca3af;
+        }
       `}</style>
     </div>
   );
 };
+
+export default FriendsWidget;

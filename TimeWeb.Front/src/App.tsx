@@ -3,10 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { SignUpPage } from './pages/SignUpPage';
-import { LayoutPage } from './LayoutPage'; // Импортируем Layout
+import { LayoutPage } from './pages/LayoutPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { EventsPage } from './pages/EventsPage'; // Импортируем Events
+import { EventsPage } from './pages/EventsPage';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Компонент для защиты приватных маршрутов (требует авторизации)
+// ─────────────────────────────────────────────────────────────────────────────
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
   
@@ -20,36 +23,95 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         backgroundColor: '#f5f7fa'
       }}>
         <div style={{ textAlign: 'center' }}>
+          <div className="spinner" />
           <div style={{ 
-            width: '40px', 
-            height: '40px', 
-            border: '4px solid #e0e0e0',
-            borderTop: '4px solid #667eea',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 16px'
-          }} />
-          <div style={{ color: '#666', fontSize: '14px' }}>Загрузка...</div>
+            marginTop: '16px', 
+            color: '#666', 
+            fontSize: '14px',
+            fontWeight: 500
+          }}>
+            Загрузка...
+          </div>
         </div>
       </div>
     );
   }
   
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
   
   return children;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Компонент для публичных маршрутов (редиректит если уже авторизован)
+// ─────────────────────────────────────────────────────────────────────────────
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh',
+        backgroundColor: '#f5f7fa'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" />
+          <div style={{ 
+            marginTop: '16px', 
+            color: '#666', 
+            fontSize: '14px',
+            fontWeight: 500
+          }}>
+            Загрузка...
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Главный компонент приложения
+// ─────────────────────────────────────────────────────────────────────────────
 export const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Публичные маршруты */}
-          <Route path="/" element={<LoginPage />} />
-          <Route path="/sign-up" element={<SignUpPage />} />
+          {/* ──────────────────────────────────────────────────────────────────
+              Публичные маршруты (доступны только неавторизованным)
+              ────────────────────────────────────────────────────────────────── */}
+          <Route 
+            path="/" 
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            } 
+          />
+          <Route 
+            path="/sign-up" 
+            element={
+              <PublicRoute>
+                <SignUpPage />
+              </PublicRoute>
+            } 
+          />
           
-          {/* Защищенные маршруты с Layout */}
+          {/* ──────────────────────────────────────────────────────────────────
+              Защищенные маршруты (требуют авторизации)
+              ────────────────────────────────────────────────────────────────── */}
           <Route 
             path="/dashboard" 
             element={
@@ -59,14 +121,27 @@ export const App = () => {
             }
           >
             {/* Дочерние маршруты для LayoutPage (рендерятся в Outlet) */}
-            <Route index element={<DashboardPage />} /> {/* По умолчанию /dashboard */}
-            <Route path="events" element={<EventsPage />} /> {/* /dashboard/events */}
+            <Route 
+              index 
+              element={<DashboardPage />} 
+            />
+            <Route 
+              path="events" 
+              element={<EventsPage />} 
+            />
           </Route>
           
-          {/* Редирект на dashboard если кто-то попытается зайти на корень уже авторизованным (опционально) */}
-          {/* <Route path="/" element={<Navigate to="/dashboard" />} /> */}
+          {/* ──────────────────────────────────────────────────────────────────
+              Обработка несуществующих маршрутов (404)
+              ────────────────────────────────────────────────────────────────── */}
+          <Route 
+            path="*" 
+            element={<Navigate to="/dashboard" replace />} 
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
   );
 };
+
+export default App;
