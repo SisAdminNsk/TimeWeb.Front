@@ -1,63 +1,22 @@
 import { useAuth } from '../AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { FriendsProvider } from '../FriendsContext';
 import { FriendsWidget } from '../FriendsWidget';
 
 export const DashboardPage = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
+  const { user } = useAuth();
 
   if (!user) return null;
 
   return (
-    <div style={{ 
-      maxWidth: '1200px', 
-      margin: '0 auto', 
-      padding: '20px',
-      minHeight: '100vh',
-      backgroundColor: '#f5f7fa'
-    }}>
-      {/* Заголовок страницы */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        marginBottom: '30px',
-        padding: '20px',
-        backgroundColor: 'white',
-        borderRadius: '8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '24px', color: '#333' }}>
-            Личный кабинет
-          </h1>
-          <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '14px' }}>
-            Добро пожаловать, <strong>{user.name}</strong>!
-          </p>
-        </div>
-        <button 
-          onClick={handleLogout} 
-          style={{ 
-            padding: '10px 20px', 
-            background: '#f44336', 
-            color: 'white', 
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 500,
-            transition: 'background 0.2s'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.background = '#d32f2f'}
-          onMouseOut={(e) => e.currentTarget.style.background = '#f44336'}
-        >
-          Выйти
-        </button>
+    <div>
+      {/* Заголовок внутри контента (опционально, можно убрать совсем) */}
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{ margin: 0, fontSize: '24px', color: '#333' }}>
+          Личный кабинет
+        </h1>
+        <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '14px' }}>
+          Добро пожаловать, <strong>{user.name}</strong>!
+        </p>
       </div>
 
       {/* Основной контент с виджетом */}

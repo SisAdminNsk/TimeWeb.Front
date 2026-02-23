@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { SignUpPage } from './pages/SignUpPage';
+import { LayoutPage } from './LayoutPage'; // Импортируем Layout
 import { DashboardPage } from './pages/DashboardPage';
+import { EventsPage } from './pages/EventsPage'; // Импортируем Events
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -43,16 +45,26 @@ export const App = () => {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Публичные маршруты */}
           <Route path="/" element={<LoginPage />} />
           <Route path="/sign-up" element={<SignUpPage />} />
+          
+          {/* Защищенные маршруты с Layout */}
           <Route 
             path="/dashboard" 
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <LayoutPage />
               </ProtectedRoute>
-            } 
-          />
+            }
+          >
+            {/* Дочерние маршруты для LayoutPage (рендерятся в Outlet) */}
+            <Route index element={<DashboardPage />} /> {/* По умолчанию /dashboard */}
+            <Route path="events" element={<EventsPage />} /> {/* /dashboard/events */}
+          </Route>
+          
+          {/* Редирект на dashboard если кто-то попытается зайти на корень уже авторизованным (опционально) */}
+          {/* <Route path="/" element={<Navigate to="/dashboard" />} /> */}
         </Routes>
       </BrowserRouter>
     </AuthProvider>
