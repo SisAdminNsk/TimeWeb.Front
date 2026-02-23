@@ -16,6 +16,8 @@ export const FriendsWidget = () => {
     incomingTotalCount,
     outgoingTotalCount,
     friendsPage,
+    incomingPage,
+    outgoingPage,
     pageSize,
     isLoading,
     error,
@@ -26,6 +28,8 @@ export const FriendsWidget = () => {
     declineOutgoingInvite,
     removeFriend,
     refreshFriends,
+    refreshIncomingInvites,
+    refreshOutgoingInvites,
     refreshInvites,
     clearError,
     clearNotification,
@@ -36,7 +40,9 @@ export const FriendsWidget = () => {
     refreshInvites();
   }, []);
 
-  const totalPages = Math.ceil(friendsTotalCount / pageSize);
+  const friendsTotalPages = Math.ceil(friendsTotalCount / pageSize);
+  const incomingTotalPages = Math.ceil(incomingTotalCount / pageSize);
+  const outgoingTotalPages = Math.ceil(outgoingTotalCount / pageSize);
 
   const handleSendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +90,11 @@ export const FriendsWidget = () => {
   const handleRefreshAll = async () => {
     setIsRefreshingAll(true);
     try {
-      await Promise.all([refreshFriends(friendsPage), refreshInvites()]);
+      await Promise.all([
+        refreshFriends(friendsPage), 
+        refreshIncomingInvites(incomingPage), 
+        refreshOutgoingInvites(outgoingPage)
+      ]);
     } catch (err) {
       console.error('Failed to refresh all:', err);
     } finally {
@@ -92,10 +102,19 @@ export const FriendsWidget = () => {
     }
   };
 
-  const handlePageChange = async (newPage: number) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    
+  const handleFriendsPageChange = async (newPage: number) => {
+    if (newPage < 1 || newPage > friendsTotalPages) return;
     await refreshFriends(newPage);
+  };
+
+  const handleIncomingPageChange = async (newPage: number) => {
+    if (newPage < 1 || newPage > incomingTotalPages) return;
+    await refreshIncomingInvites(newPage);
+  };
+
+  const handleOutgoingPageChange = async (newPage: number) => {
+    if (newPage < 1 || newPage > outgoingTotalPages) return;
+    await refreshOutgoingInvites(newPage);
   };
 
   const getErrorMessage = () => {
@@ -314,10 +333,39 @@ export const FriendsWidget = () => {
   const incomingList = Array.isArray(incomingInvites) ? incomingInvites : [];
   const outgoingList = Array.isArray(outgoingInvites) ? outgoingInvites : [];
 
-  const renderFriendsList = () => {
-    const hasPrevPage = friendsPage > 1;
-    const hasNextPage = friendsPage < totalPages;
+  const renderPagination = (
+    currentPage: number,
+    totalPages: number,
+    onPageChange: (page: number) => void,
+    disabled: boolean
+  ) => {
+    if (totalPages <= 1) return null;
+    
+    const hasPrevPage = currentPage > 1;
+    const hasNextPage = currentPage < totalPages;
 
+    return (
+      <div style={styles.paginationContainer}>
+        <button
+          style={styles.button('pagination', !hasPrevPage || disabled)}
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={!hasPrevPage || disabled}
+        >
+          ← Назад
+        </button>
+        <span style={styles.pageInfo}>Стр. {currentPage} из {totalPages}</span>
+        <button
+          style={styles.button('pagination', !hasNextPage || disabled)}
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={!hasNextPage || disabled}
+        >
+          Вперед →
+        </button>
+      </div>
+    );
+  };
+
+  const renderFriendsList = () => {
     return (
       <div>
         <div style={styles.sectionHeader}>
@@ -348,25 +396,7 @@ export const FriendsWidget = () => {
           ))
         )}
 
-        {totalPages > 1 && (
-          <div style={styles.paginationContainer}>
-            <button
-              style={styles.button('pagination', !hasPrevPage || isLoading)}
-              onClick={() => handlePageChange(friendsPage - 1)}
-              disabled={!hasPrevPage || isLoading}
-            >
-              ← Назад
-            </button>
-            <span style={styles.pageInfo}>Стр. {friendsPage} из {totalPages}</span>
-            <button
-              style={styles.button('pagination', !hasNextPage || isLoading)}
-              onClick={() => handlePageChange(friendsPage + 1)}
-              disabled={!hasNextPage || isLoading}
-            >
-              Вперед →
-            </button>
-          </div>
-        )}
+        {renderPagination(friendsPage, friendsTotalPages, handleFriendsPageChange, isLoading)}
       </div>
     );
   };
@@ -407,6 +437,8 @@ export const FriendsWidget = () => {
           </div>
         ))
       )}
+
+      {renderPagination(incomingPage, incomingTotalPages, handleIncomingPageChange, isLoading || isRefreshingAll)}
     </div>
   );
 
@@ -437,6 +469,8 @@ export const FriendsWidget = () => {
           </div>
         ))
       )}
+
+      {renderPagination(outgoingPage, outgoingTotalPages, handleOutgoingPageChange, isLoading)}
     </div>
   );
 

@@ -20,6 +20,8 @@ interface FriendsContextType {
   incomingTotalCount: number;
   outgoingTotalCount: number;
   friendsPage: number;
+  incomingPage: number;
+  outgoingPage: number;
   pageSize: number;
   
   isLoading: boolean;
@@ -33,9 +35,13 @@ interface FriendsContextType {
   removeFriend: (friendId: string) => Promise<void>;
   
   refreshFriends: (page?: number) => Promise<void>;
+  refreshIncomingInvites: (page?: number) => Promise<void>;
+  refreshOutgoingInvites: (page?: number) => Promise<void>;
   refreshInvites: () => Promise<void>;
   
   setFriendsPage: (page: number) => void;
+  setIncomingPage: (page: number) => void;
+  setOutgoingPage: (page: number) => void;
   clearError: () => void;
   clearNotification: () => void;
 }
@@ -52,6 +58,9 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
   const [outgoingTotalCount, setOutgoingTotalCount] = useState(0);
   
   const [friendsPage, setFriendsPage] = useState(1);
+  const [incomingPage, setIncomingPage] = useState(1);
+  const [outgoingPage, setOutgoingPage] = useState(1);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [notification, setNotification] = useState<Notification | null>(null);
@@ -66,23 +75,16 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshFriends = useCallback(async (page: number = 1) => {
     try {
-      // Сначала запрашиваем данные для указанной страницы
       const response = await friendsClient.getFriends(page, PAGE_SIZE);
       setFriends(response.friends);
       setFriendsTotalCount(response.totalCount);
       
-      // Вычисляем актуальное количество страниц
       const newTotalPages = Math.ceil(response.totalCount / PAGE_SIZE);
       
-      // Исправленная логика:
-      // 1. Если страниц нет вообще (0 друзей) — сбрасываем на 1
-      // 2. Если запрошенная страница больше доступных — загружаем последнюю страницу
-      // 3. Иначе остаёмся на запрошенной странице
       let newPage = page;
       if (newTotalPages === 0) {
         newPage = 1;
       } else if (page > newTotalPages) {
-        // Запрашиваем данные для корректной страницы
         newPage = newTotalPages;
         const correctedResponse = await friendsClient.getFriends(newPage, PAGE_SIZE);
         setFriends(correctedResponse.friends);
@@ -95,20 +97,61 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const refreshInvites = useCallback(async () => {
+  const refreshIncomingInvites = useCallback(async (page: number = 1) => {
     try {
-      const [incoming, outgoing] = await Promise.all([
-        friendsClient.getInvites(true, 1, 20),
-        friendsClient.getInvites(false, 1, 20),
-      ]);
-      setIncomingInvites(incoming.invites);
-      setOutgoingInvites(outgoing.invites);
-      setIncomingTotalCount(incoming.totalCount);
-      setOutgoingTotalCount(outgoing.totalCount);
+      const response = await friendsClient.getInvites(true, page, PAGE_SIZE);
+      setIncomingInvites(response.invites);
+      setIncomingTotalCount(response.totalCount);
+      
+      const newTotalPages = Math.ceil(response.totalCount / PAGE_SIZE);
+      
+      let newPage = page;
+      if (newTotalPages === 0) {
+        newPage = 1;
+      } else if (page > newTotalPages) {
+        newPage = newTotalPages;
+        const correctedResponse = await friendsClient.getInvites(true, newPage, PAGE_SIZE);
+        setIncomingInvites(correctedResponse.invites);
+        setIncomingTotalCount(correctedResponse.totalCount);
+      }
+      
+      setIncomingPage(newPage);
     } catch (err) {
       setError(err as ApiError);
     }
   }, []);
+
+  const refreshOutgoingInvites = useCallback(async (page: number = 1) => {
+    try {
+      const response = await friendsClient.getInvites(false, page, PAGE_SIZE);
+      setOutgoingInvites(response.invites);
+      setOutgoingTotalCount(response.totalCount);
+      
+      const newTotalPages = Math.ceil(response.totalCount / PAGE_SIZE);
+      
+      let newPage = page;
+      if (newTotalPages === 0) {
+        newPage = 1;
+      } else if (page > newTotalPages) {
+        newPage = newTotalPages;
+        const correctedResponse = await friendsClient.getInvites(false, newPage, PAGE_SIZE);
+        setOutgoingInvites(correctedResponse.invites);
+        setOutgoingTotalCount(correctedResponse.totalCount);
+      }
+      
+      setOutgoingPage(newPage);
+    } catch (err) {
+      setError(err as ApiError);
+    }
+  }, []);
+
+  // Для обратной совместимости - загружает первую страницу обоих типов
+  const refreshInvites = useCallback(async () => {
+    await Promise.all([
+      refreshIncomingInvites(1),
+      refreshOutgoingInvites(1)
+    ]);
+  }, [refreshIncomingInvites, refreshOutgoingInvites]);
 
   const sendFriendRequest = useCallback(async (username: string) => {
     setIsLoading(true);
@@ -117,7 +160,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       const checkUserExistenceResponse = await usersClient.checkUserExistence(username);
       const userId = checkUserExistenceResponse.userId;
       await friendsClient.sendInvite(userId);
-      await refreshInvites();
+      await refreshOutgoingInvites(outgoingPage);
       showNotification('success', 'Заявка отправлена!');
     } catch (err) {
       const apiError = err as ApiError;
@@ -132,20 +175,26 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [refreshInvites, showNotification]);
+  }, [refreshOutgoingInvites, showNotification, outgoingPage]);
 
   const acceptInvite = useCallback(async (inviteId: string) => {
     setIsLoading(true);
     setError(null);
     try {
       await friendsClient.acceptInvite(inviteId);
-      await Promise.all([refreshFriends(friendsPage), refreshInvites()]);
+      await Promise.all([
+        refreshFriends(friendsPage), 
+        refreshIncomingInvites(incomingPage)
+      ]);
       showNotification('success', 'Заявка принята!');
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.statusCode === 404) {
+        // Заявка исчезла - удаляем из списка локально
         setIncomingInvites(prev => prev.filter(invite => invite.id !== inviteId));
         setIncomingTotalCount(prev => Math.max(0, prev - 1));
+        // Проверяем и корректируем страницу
+        await refreshIncomingInvites(incomingPage);
         showNotification('info', 'Заявки больше не существует');
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при принятии заявки');
@@ -154,20 +203,23 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [refreshFriends, refreshInvites, showNotification, friendsPage]);
+  }, [refreshFriends, refreshIncomingInvites, showNotification, friendsPage, incomingPage]);
 
   const declineInvite = useCallback(async (inviteId: string) => {
     setIsLoading(true);
     setError(null);
     try {
       await friendsClient.declineInvite(inviteId);
-      await refreshInvites();
+      await refreshIncomingInvites(incomingPage);
       showNotification('success', 'Заявка отклонена');
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.statusCode === 404) {
+        // Заявка исчезла - удаляем из списка локально
         setIncomingInvites(prev => prev.filter(invite => invite.id !== inviteId));
         setIncomingTotalCount(prev => Math.max(0, prev - 1));
+        // Проверяем и корректируем страницу
+        await refreshIncomingInvites(incomingPage);
         showNotification('info', 'Заявки больше не существует');
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при отклонении заявки');
@@ -176,20 +228,23 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [refreshInvites, showNotification]);
+  }, [refreshIncomingInvites, showNotification, incomingPage]);
 
   const declineOutgoingInvite = useCallback(async (inviteId: string) => {
     setIsLoading(true);
     setError(null);
     try {
       await friendsClient.declineInvite(inviteId);
-      await refreshInvites();
+      await refreshOutgoingInvites(outgoingPage);
       showNotification('success', 'Заявка отозвана');
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.statusCode === 404) {
+        // Заявка исчезла - удаляем из списка локально
         setOutgoingInvites(prev => prev.filter(invite => invite.id !== inviteId));
         setOutgoingTotalCount(prev => Math.max(0, prev - 1));
+        // Проверяем и корректируем страницу
+        await refreshOutgoingInvites(outgoingPage);
         showNotification('info', 'Заявки больше не существует');
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при отзыве заявки');
@@ -198,14 +253,13 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [refreshInvites, showNotification]);
+  }, [refreshOutgoingInvites, showNotification, outgoingPage]);
 
   const removeFriend = useCallback(async (friendId: string) => {
     setIsLoading(true);
     setError(null);
     try {
       await friendsClient.removeFriend(friendId);
-      // refreshFriends сам проверит и скорректирует страницу если нужно
       await refreshFriends(friendsPage);
       showNotification('success', 'Друг удален');
     } catch (err) {
@@ -226,6 +280,8 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       incomingTotalCount,
       outgoingTotalCount,
       friendsPage,
+      incomingPage,
+      outgoingPage,
       pageSize: PAGE_SIZE,
       isLoading,
       error,
@@ -236,8 +292,12 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       declineOutgoingInvite,
       removeFriend,
       refreshFriends,
+      refreshIncomingInvites,
+      refreshOutgoingInvites,
       refreshInvites,
       setFriendsPage,
+      setIncomingPage,
+      setOutgoingPage,
       clearError,
       clearNotification,
     }}>
