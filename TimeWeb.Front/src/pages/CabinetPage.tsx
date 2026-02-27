@@ -1,4 +1,4 @@
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../components/AuthContext';
 import { FriendsProvider } from '../components/FriendsContext';
 import { FriendsWidget } from '../components/FriendsWidget';
 import { theme } from '../styles/theme';
