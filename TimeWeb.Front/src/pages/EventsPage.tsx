@@ -68,16 +68,16 @@ const EventsPageContent = () => {
     <div style={containerStyle}>
       <header style={headerStyle}>
         <h1 style={titleStyle}>
-          <span>📅</span>
-          Мероприятия
+          <span></span>
         </h1>
         <p style={subtitleStyle}>
-          Планируйте события и приглашайте друзей
+          Планируйте встречи и приглашайте друзей
         </p>
       </header>
 
       {notification && (
         <div style={notificationStyle(notification.type)}>
+          
           <span>
             {notification.type === 'success' && '✓ '}
             {notification.type === 'error' && '⚠️ '}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { theme } from '../styles/theme';
@@ -6,16 +6,31 @@ import { theme } from '../styles/theme';
 export const SignUpPage = () => {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [successNotification, setSuccessNotification] = useState<string | null>(null);
   const { register, lastError, clearError, isSubmitting } = useAuth();
   const navigate = useNavigate();
+
+  const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
+
+  useEffect(() => {
+    if (successNotification) {
+      const timer = setTimeout(() => {
+        setSuccessNotification(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successNotification]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    setSuccessNotification(null);
     try {
       await register(name, password);
-      alert('Регистрация успешна! Теперь войдите.');
-      navigate('/');
+      setSuccessNotification('✓ Регистрация успешна! Теперь вы можете войти.');
+      setTimeout(() => {
+        navigate('/');
+      }, 2000);
     } catch (err) {
       console.error('Registration error:', err);
     }
@@ -28,8 +43,6 @@ export const SignUpPage = () => {
   const hasGlobalError = () => {
     return lastError && lastError.errorMessage && !lastError.details;
   };
-
-  const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
 
   const containerStyle: React.CSSProperties = {
     display: 'flex',
@@ -119,6 +132,22 @@ export const SignUpPage = () => {
     border: `1px solid ${colors.error}`,
   };
 
+  const successNotificationStyle: React.CSSProperties = {
+    backgroundColor: colors.successLight,
+    color: colors.successDark,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    fontSize: typography.fontSize.sm,
+    border: `1px solid ${colors.success}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    animation: 'slideIn 0.3s ease-out',
+  };
+
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
@@ -148,6 +177,29 @@ export const SignUpPage = () => {
           </div>
         )}
 
+        {successNotification && (
+          <div style={successNotificationStyle}>
+            <span>{successNotification}</span>
+            <button
+              onClick={() => setSuccessNotification(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'inherit',
+                fontSize: typography.fontSize.lg,
+                padding: '0 4px',
+                outline: 'none',
+                opacity: 0.7,
+              }}
+              onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseOut={(e) => e.currentTarget.style.opacity = '0.7'}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div style={inputGroupStyle}>
             <label style={labelStyle}>Ваше имя</label>
@@ -155,7 +207,7 @@ export const SignUpPage = () => {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || successNotification !== null}
               style={inputStyle}
               placeholder="Введите имя"
               onFocus={(e) => e.target.style.borderColor = colors.primary}
@@ -172,7 +224,7 @@ export const SignUpPage = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || successNotification !== null}
               style={inputStyle}
               placeholder="Придумайте пароль"
               onFocus={(e) => e.target.style.borderColor = colors.primary}
@@ -185,19 +237,24 @@ export const SignUpPage = () => {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || successNotification !== null}
             style={buttonStyle}
             onMouseOver={(e) => {
-              if (!isSubmitting) e.currentTarget.style.backgroundColor = colors.successDark;
+              if (!isSubmitting && !successNotification) e.currentTarget.style.backgroundColor = colors.successDark;
             }}
             onMouseOut={(e) => {
-              if (!isSubmitting) e.currentTarget.style.backgroundColor = colors.success;
+              if (!isSubmitting && !successNotification) e.currentTarget.style.backgroundColor = colors.success;
             }}
           >
             {isSubmitting ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }} />
+                <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderStyle: 'solid', borderColor: `${colors.white} ${colors.white} transparent transparent`, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                 Регистрация...
+              </span>
+            ) : successNotification ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <span>✓</span>
+                Перенаправление...
               </span>
             ) : (
               'Зарегистрироваться'
@@ -207,11 +264,34 @@ export const SignUpPage = () => {
 
         <p style={{ textAlign: 'center', marginTop: spacing.xl, color: colors.gray500, fontSize: typography.fontSize.sm }}>
           Уже есть аккаунт?{' '}
-          <Link to="/" style={linkStyle}>
+          <Link to="/sign-in" style={linkStyle}>
             Войти
           </Link>
         </p>
       </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
+
+export default SignUpPage;

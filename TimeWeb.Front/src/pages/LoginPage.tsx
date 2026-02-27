@@ -14,7 +14,7 @@ export const LoginPage = () => {
     clearError();
     try {
       await login(username, password);
-      navigate('/dashboard');
+      navigate('/cabinet');
     } catch (err) {
       console.error('Login error:', err);
     }

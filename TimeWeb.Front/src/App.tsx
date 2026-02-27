@@ -4,12 +4,9 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { LayoutPage } from './pages/LayoutPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { CabinetPage } from './pages/CabinetPage';
 import { EventsPage } from './pages/EventsPage';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Компонент для защиты приватных маршрутов (требует авторизации)
-// ─────────────────────────────────────────────────────────────────────────────
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
   
@@ -38,15 +35,12 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
   
   if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/sign-in" replace />;
   }
   
   return children;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Компонент для публичных маршрутов (редиректит если уже авторизован)
-// ─────────────────────────────────────────────────────────────────────────────
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
   
@@ -75,25 +69,20 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   }
   
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/cabinet" replace />;
   }
   
   return children;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Главный компонент приложения
-// ─────────────────────────────────────────────────────────────────────────────
 export const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* ──────────────────────────────────────────────────────────────────
-              Публичные маршруты (доступны только неавторизованным)
-              ────────────────────────────────────────────────────────────────── */}
+          {/* Публичные маршруты */}
           <Route 
-            path="/" 
+            path="/sign-in" 
             element={
               <PublicRoute>
                 <LoginPage />
@@ -109,21 +98,18 @@ export const App = () => {
             } 
           />
           
-          {/* ──────────────────────────────────────────────────────────────────
-              Защищенные маршруты (требуют авторизации)
-              ────────────────────────────────────────────────────────────────── */}
+          {/* Защищённые маршруты с общим Layout */}
           <Route 
-            path="/dashboard" 
+            path="/" 
             element={
               <ProtectedRoute>
                 <LayoutPage />
               </ProtectedRoute>
             }
           >
-            {/* Дочерние маршруты для LayoutPage (рендерятся в Outlet) */}
             <Route 
-              index 
-              element={<DashboardPage />} 
+              path="cabinet" 
+              element={<CabinetPage />} 
             />
             <Route 
               path="events" 
@@ -131,12 +117,10 @@ export const App = () => {
             />
           </Route>
           
-          {/* ──────────────────────────────────────────────────────────────────
-              Обработка несуществующих маршрутов (404)
-              ────────────────────────────────────────────────────────────────── */}
+          {/* 404 */}
           <Route 
             path="*" 
-            element={<Navigate to="/dashboard" replace />} 
+            element={<Navigate to="/cabinet" replace />} 
           />
         </Routes>
       </BrowserRouter>

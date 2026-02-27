@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { theme } from '../styles/theme';
@@ -7,12 +7,52 @@ export const LayoutPage = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { colors, typography, spacing, borderRadius, transitions, shadows} = theme;
+  const { colors, typography, spacing, borderRadius, transitions, shadows } = theme;
+
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate('/sign-in');
   };
+
+  const checkConnection = async () => {
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      return;
+    }
+
+    try {
+      await fetch('https://www.google.com/favicon.ico', { 
+        method: 'HEAD', 
+        mode: 'no-cors',
+        cache: 'no-store' 
+      });
+      setIsOnline(true);
+    } catch (error) {
+      setIsOnline(false);
+    }
+  };
+
+  useEffect(() => {
+    checkConnection();
+
+    const intervalId = setInterval(() => {
+      checkConnection();
+    }, 5000);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const containerStyle: React.CSSProperties = {
     display: 'flex',
@@ -42,7 +82,6 @@ export const LayoutPage = () => {
     alignItems: 'center',
     gap: spacing.sm,
   };
-
 
   const logoTextStyle: React.CSSProperties = {
     margin: 0,
@@ -105,10 +144,11 @@ export const LayoutPage = () => {
 
   const userStatusStyle: React.CSSProperties = {
     fontSize: typography.fontSize.xs,
-    color: colors.sidebar.textMuted,
+    color: isOnline ? colors.sidebar.textMuted : colors.error,
     display: 'flex',
     alignItems: 'center',
     gap: spacing.xs,
+    transition: `color ${transitions.normal}`,
   };
 
   const logoutButtonStyle: React.CSSProperties = {
@@ -145,11 +185,11 @@ export const LayoutPage = () => {
         </div>
 
         <nav style={navStyle}>
-          <Link to="/dashboard" style={navItemStyle('/dashboard')}>
+          <Link to="/cabinet" style={navItemStyle('/cabinet')}>
             Личный кабинет
           </Link>
-          <Link to="/dashboard/events" style={navItemStyle('/dashboard/events')}>
-            Календарь мероприятий
+          <Link to="/events" style={navItemStyle('/events')}>
+            Календарь встреч
           </Link>
         </nav>
 
@@ -161,19 +201,22 @@ export const LayoutPage = () => {
             <div>
               <div style={userNameStyle}>{user?.name}</div>
               <div style={userStatusStyle}>
-                <span style={{ 
-                  width: '6px', 
-                  height: '6px', 
-                  backgroundColor: colors.success, 
-                  borderRadius: '50%',
-                  display: 'inline-block'
-                }} />
-                Онлайн
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    backgroundColor: isOnline ? colors.success : colors.error,
+                    borderRadius: '50%',
+                    display: 'inline-block',
+                    transition: `background-color ${transitions.normal}`,
+                  }}
+                />
+                {isOnline ? 'Онлайн' : 'Нет соединения'}
               </div>
             </div>
           </div>
-          
-          <button 
+
+          <button
             onClick={handleLogout}
             style={logoutButtonStyle}
             onMouseOver={(e) => {

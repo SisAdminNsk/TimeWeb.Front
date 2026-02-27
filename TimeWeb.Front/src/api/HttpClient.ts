@@ -70,5 +70,4 @@ export function getAuthToken(): string | null {
   return null;
 }
 
-// Экспортируем константы для использования в других клиентах
 export { REQUEST_TIMEOUT, STORAGE_KEY };

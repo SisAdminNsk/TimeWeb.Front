@@ -40,7 +40,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [notification, setNotification] = useState<Notification | null>(null);
 
-  // Загрузка событий из localStorage при монтировании
   useEffect(() => {
     const savedEvents = localStorage.getItem('calendarEvents');
     if (savedEvents) {
@@ -52,7 +51,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // Сохранение событий в localStorage при изменении
   useEffect(() => {
     localStorage.setItem('calendarEvents', JSON.stringify(events));
   }, [events]);

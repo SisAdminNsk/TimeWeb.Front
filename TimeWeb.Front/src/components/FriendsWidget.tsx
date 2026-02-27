@@ -566,7 +566,6 @@ export const FriendsWidget = () => {
     <div style={styles.widget}>
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          <span>👥</span>
           <span>Друзья</span>
         </div>
         <button
@@ -667,7 +666,7 @@ export const FriendsWidget = () => {
         
         {isLoading && !isRefreshingAll && (
           <div style={styles.loading}>
-            ⏳ Загрузка...
+            Загрузка...
           </div>
         )}
         

@@ -15,9 +15,9 @@ export const config: AppConfig = {
 };
 
 if (!config.usersApiUrl) {
-  console.error('❌ VITE_USERS_API_URL не настроен!');
+  console.error('VITE_USERS_API_URL не настроен');
 }
 
 if (!config.friendsApiUrl) {
-  console.error('❌ VITE_FRIENDS_API_URL не настроен!');
+  console.error('VITE_FRIENDS_API_URL не настроен');
 }

@@ -145,7 +145,6 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // Для обратной совместимости - загружает первую страницу обоих типов
   const refreshInvites = useCallback(async () => {
     await Promise.all([
       refreshIncomingInvites(1),
@@ -190,10 +189,8 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.statusCode === 404) {
-        // Заявка исчезла - удаляем из списка локально
         setIncomingInvites(prev => prev.filter(invite => invite.id !== inviteId));
         setIncomingTotalCount(prev => Math.max(0, prev - 1));
-        // Проверяем и корректируем страницу
         await refreshIncomingInvites(incomingPage);
         showNotification('info', 'Заявки больше не существует');
       } else {
@@ -215,10 +212,8 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.statusCode === 404) {
-        // Заявка исчезла - удаляем из списка локально
         setIncomingInvites(prev => prev.filter(invite => invite.id !== inviteId));
         setIncomingTotalCount(prev => Math.max(0, prev - 1));
-        // Проверяем и корректируем страницу
         await refreshIncomingInvites(incomingPage);
         showNotification('info', 'Заявки больше не существует');
       } else {
@@ -240,10 +235,8 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       const apiError = err as ApiError;
       if (apiError.statusCode === 404) {
-        // Заявка исчезла - удаляем из списка локально
         setOutgoingInvites(prev => prev.filter(invite => invite.id !== inviteId));
         setOutgoingTotalCount(prev => Math.max(0, prev - 1));
-        // Проверяем и корректируем страницу
         await refreshOutgoingInvites(outgoingPage);
         showNotification('info', 'Заявки больше не существует');
       } else {
