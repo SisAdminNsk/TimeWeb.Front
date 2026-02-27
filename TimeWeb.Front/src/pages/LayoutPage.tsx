@@ -43,28 +43,12 @@ export const LayoutPage = () => {
     gap: spacing.sm,
   };
 
-  const logoIconStyle: React.CSSProperties = {
-    width: '40px',
-    height: '40px',
-    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
-    borderRadius: borderRadius.md,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '20px',
-  };
 
   const logoTextStyle: React.CSSProperties = {
     margin: 0,
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
     color: colors.sidebar.text,
-  };
-
-  const logoSubStyle: React.CSSProperties = {
-    fontSize: typography.fontSize.xs,
-    color: colors.sidebar.textMuted,
-    marginTop: spacing.xs,
   };
 
   const navStyle: React.CSSProperties = {
@@ -155,10 +139,8 @@ export const LayoutPage = () => {
     <div style={containerStyle}>
       <aside style={sidebarStyle}>
         <div style={logoStyle}>
-          <div style={logoIconStyle}>🎯</div>
           <div>
             <h2 style={logoTextStyle}>TimeWeb</h2>
-            <div style={logoSubStyle}>Версия 1.0</div>
           </div>
         </div>
 
