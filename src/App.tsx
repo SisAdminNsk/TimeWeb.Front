@@ -107,6 +107,11 @@ export const App = () => {
               </ProtectedRoute>
             }
           >
+            {/* Автоматический редирект с корня на /cabinet */}
+            <Route 
+              index 
+              element={<Navigate to="/cabinet" replace />} 
+            />
             <Route 
               path="cabinet" 
               element={<CabinetPage />} 
