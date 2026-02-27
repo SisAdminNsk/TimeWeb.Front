@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { usersClient } from '../api/users/UsersClient';
 import type { ApiError } from '../api/ApiError';
@@ -15,16 +16,18 @@ interface AuthContext {
   isSubmitting: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (name: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: (reason?: 'unauthorized' | 'user') => void;
   getToken: () => string;
+  handleUnauthorized: (error: ApiError) => boolean;
   lastError: ApiError | null;
   clearError: () => void;
 }
 
-const userSession = "user_session";
+const userSession = 'user_session';
 const AuthContext = createContext<AuthContext | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await usersClient.signIn({ username, password });
       const session: UserSession = {
         token: response.token,
-        name: username 
+        name: username,
       };
       saveSession(session);
       setUser(session);
@@ -51,9 +54,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!err.getFieldError) {
         setLastError({
           errorCode: err.name === 'AbortError' ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
-          errorMessage: err.name === 'AbortError' 
-            ? 'Превышено время ожидания ответа от сервера (10 сек)' 
-            : err.message || 'Сервер недоступен. Проверьте подключение.',
+          errorMessage:
+            err.name === 'AbortError'
+              ? 'Превышено время ожидания ответа от сервера (10 сек)'
+              : err.message || 'Сервер недоступен. Проверьте подключение.',
           statusCode: 0,
           getFieldError: () => undefined,
           getFieldErrors: () => undefined,
@@ -76,9 +80,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!err.getFieldError) {
         setLastError({
           errorCode: err.name === 'AbortError' ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
-          errorMessage: err.name === 'AbortError' 
-            ? 'Превышено время ожидания ответа от сервера (10 сек)' 
-            : err.message || 'Сервер недоступен. Проверьте подключение.',
+          errorMessage:
+            err.name === 'AbortError'
+              ? 'Превышено время ожидания ответа от сервера (10 сек)'
+              : err.message || 'Сервер недоступен. Проверьте подключение.',
           statusCode: 0,
           getFieldError: () => undefined,
           getFieldErrors: () => undefined,
@@ -92,9 +97,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = () => {
+  const logout = (reason: 'unauthorized' | 'user' = 'user') => {
     clearSession();
     setUser(null);
+    if (reason === 'unauthorized') {
+      navigate('/sign-in', {
+        state: { message: 'Токен авторизации невалиден. Войдите снова.' },
+      });
+    }
   };
 
   const clearError = () => setLastError(null);
@@ -122,19 +132,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return session.token;
   };
 
+  const handleUnauthorized = (error: ApiError): boolean => {
+    if (error.statusCode === 401) {
+      logout('unauthorized');
+      return true;
+    }
+    return false;
+  };
+
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated: !!user, 
-      isLoading, 
-      isSubmitting,
-      login, 
-      register, 
-      logout,
-      getToken,
-      lastError,
-      clearError
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        isSubmitting,
+        login,
+        register,
+        logout,
+        getToken,
+        handleUnauthorized,
+        lastError,
+        clearError,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

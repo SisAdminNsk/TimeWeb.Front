@@ -51,7 +51,7 @@ const FriendsContext = createContext<FriendsContextType | undefined>(undefined);
 
 export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
-  const { getToken } = useAuth();
+  const { getToken, handleUnauthorized } = useAuth();
 
   const [friends, setFriends] = useState<FriendshipDto[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<FriendshipInviteDto[]>([]);
@@ -97,7 +97,11 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       
       setFriendsPage(newPage);
     } catch (err) {
-      setError(err as ApiError);
+      let apiError = err as ApiError;
+      if(handleUnauthorized(apiError)){
+        return;
+      }
+      setError(apiError);
     }
   }, []);
 
@@ -121,7 +125,11 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       
       setIncomingPage(newPage);
     } catch (err) {
-      setError(err as ApiError);
+      let apiError = err as ApiError;
+      if(handleUnauthorized(apiError)){
+        return;
+      }
+      setError(apiError);
     }
   }, []);
 
@@ -145,7 +153,11 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       
       setOutgoingPage(newPage);
     } catch (err) {
-      setError(err as ApiError);
+      let apiError = err as ApiError;
+      if(handleUnauthorized(apiError)){
+        return;
+      }
+      setError(apiError);
     }
   }, []);
 
@@ -173,6 +185,10 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         showNotification('error', apiError.errorMessage || 'Ошибка валидации');
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при отправке заявки');
+
+      }
+      if(handleUnauthorized(apiError)){
+        return;
       }
       throw err;
     } finally {
@@ -200,6 +216,9 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при принятии заявки');
       }
+      if(handleUnauthorized(apiError)){
+        return;
+      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -222,6 +241,9 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         showNotification('info', 'Заявки больше не существует');
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при отклонении заявки');
+      }
+      if(handleUnauthorized(apiError)){
+        return;
       }
       throw err;
     } finally {
@@ -246,6 +268,9 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при отзыве заявки');
       }
+      if(handleUnauthorized(apiError)){
+        return;
+      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -262,6 +287,9 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       const apiError = err as ApiError;
       showNotification('error', apiError.errorMessage || 'Ошибка при удалении друга');
+      if(handleUnauthorized(apiError)){
+        return;
+      }
       throw err;
     } finally {
       setIsLoading(false);

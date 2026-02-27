@@ -77,10 +77,9 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
 export const App = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
         <Routes>
-          {/* Публичные маршруты */}
           <Route 
             path="/sign-in" 
             element={
@@ -98,7 +97,6 @@ export const App = () => {
             } 
           />
           
-          {/* Защищённые маршруты с общим Layout */}
           <Route 
             path="/" 
             element={
@@ -107,7 +105,6 @@ export const App = () => {
               </ProtectedRoute>
             }
           >
-            {/* Автоматический редирект с корня на /cabinet */}
             <Route 
               index 
               element={<Navigate to="/cabinet" replace />} 
@@ -127,8 +124,8 @@ export const App = () => {
             element={<Navigate to="/cabinet" replace />} 
           />
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 
