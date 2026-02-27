@@ -3,7 +3,7 @@ import { useAuth } from '../components/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { theme } from '../styles/theme';
 
-export const LoginPage = () => {
+export const SignInPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const { login, lastError, clearError, isSubmitting } = useAuth();

@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/AuthContext';
-import { LoginPage } from './pages/LoginPage';
+import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { LayoutPage } from './pages/LayoutPage';
 import { CabinetPage } from './pages/CabinetPage';
@@ -85,7 +85,7 @@ export const App = () => {
             path="/sign-in" 
             element={
               <PublicRoute>
-                <LoginPage />
+                <SignInPage />
               </PublicRoute>
             } 
           />
@@ -122,7 +122,6 @@ export const App = () => {
             />
           </Route>
           
-          {/* 404 */}
           <Route 
             path="*" 
             element={<Navigate to="/cabinet" replace />} 
