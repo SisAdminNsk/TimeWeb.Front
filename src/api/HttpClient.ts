@@ -1,7 +1,6 @@
 import type { ApiErrorResponse, ApiError } from './ApiError';
 
 const REQUEST_TIMEOUT = 10000; // 10 секунд
-const STORAGE_KEY = 'app_session';
 
 export function createApiError(response: Response | null, body: ApiErrorResponse): ApiError {
   return {
@@ -49,13 +48,4 @@ export async function handleResponse<T>(response: Response): Promise<T> {
   return await response.json() as T;
 }
 
-export function getAuthToken(): string | null {
-  const session = localStorage.getItem(STORAGE_KEY);
-  if (session) {
-    const { token } = JSON.parse(session);
-    return token;
-  }
-  return null;
-}
-
-export { REQUEST_TIMEOUT, STORAGE_KEY };
+export { REQUEST_TIMEOUT };

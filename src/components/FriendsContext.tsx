@@ -4,6 +4,7 @@ import { friendsClient } from '../api/friends/FriendsClient';
 import { usersClient } from '../api/users/UsersClient';
 import type { FriendshipInviteDto, FriendshipDto } from '../api/friends/FriendsContracts';
 import type { ApiError } from '../api/ApiError';
+import { useAuth } from './AuthContext'
 
 export const PAGE_SIZE = 20;
 
@@ -49,6 +50,9 @@ interface FriendsContextType {
 const FriendsContext = createContext<FriendsContextType | undefined>(undefined);
 
 export const FriendsProvider = ({ children }: { children: ReactNode }) => {
+
+  const { getToken } = useAuth();
+
   const [friends, setFriends] = useState<FriendshipDto[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<FriendshipInviteDto[]>([]);
   const [outgoingInvites, setOutgoingInvites] = useState<FriendshipInviteDto[]>([]);
@@ -75,7 +79,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshFriends = useCallback(async (page: number = 1) => {
     try {
-      const response = await friendsClient.getFriends(page, PAGE_SIZE);
+      const response = await friendsClient.getFriends(getToken(), page, PAGE_SIZE);
       setFriends(response.friends);
       setFriendsTotalCount(response.totalCount);
       
@@ -86,7 +90,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         newPage = 1;
       } else if (page > newTotalPages) {
         newPage = newTotalPages;
-        const correctedResponse = await friendsClient.getFriends(newPage, PAGE_SIZE);
+        const correctedResponse = await friendsClient.getFriends(getToken(), newPage, PAGE_SIZE);
         setFriends(correctedResponse.friends);
         setFriendsTotalCount(correctedResponse.totalCount);
       }
@@ -99,7 +103,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshIncomingInvites = useCallback(async (page: number = 1) => {
     try {
-      const response = await friendsClient.getInvites(true, page, PAGE_SIZE);
+      const response = await friendsClient.getInvites(getToken(), true, page, PAGE_SIZE);
       setIncomingInvites(response.invites);
       setIncomingTotalCount(response.totalCount);
       
@@ -110,7 +114,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         newPage = 1;
       } else if (page > newTotalPages) {
         newPage = newTotalPages;
-        const correctedResponse = await friendsClient.getInvites(true, newPage, PAGE_SIZE);
+        const correctedResponse = await friendsClient.getInvites(getToken(), true, newPage, PAGE_SIZE);
         setIncomingInvites(correctedResponse.invites);
         setIncomingTotalCount(correctedResponse.totalCount);
       }
@@ -123,7 +127,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshOutgoingInvites = useCallback(async (page: number = 1) => {
     try {
-      const response = await friendsClient.getInvites(false, page, PAGE_SIZE);
+      const response = await friendsClient.getInvites(getToken(), false, page, PAGE_SIZE);
       setOutgoingInvites(response.invites);
       setOutgoingTotalCount(response.totalCount);
       
@@ -134,7 +138,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         newPage = 1;
       } else if (page > newTotalPages) {
         newPage = newTotalPages;
-        const correctedResponse = await friendsClient.getInvites(false, newPage, PAGE_SIZE);
+        const correctedResponse = await friendsClient.getInvites(getToken(), false, newPage, PAGE_SIZE);
         setOutgoingInvites(correctedResponse.invites);
         setOutgoingTotalCount(correctedResponse.totalCount);
       }
@@ -158,7 +162,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     try {
       const checkUserExistenceResponse = await usersClient.checkUserExistence(username);
       const userId = checkUserExistenceResponse.userId;
-      await friendsClient.sendInvite(userId);
+      await friendsClient.sendInvite(getToken(), userId);
       await refreshOutgoingInvites(outgoingPage);
       showNotification('success', 'Заявка отправлена!');
     } catch (err) {
@@ -180,7 +184,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.acceptInvite(inviteId);
+      await friendsClient.acceptInvite(getToken(), inviteId);
       await Promise.all([
         refreshFriends(friendsPage), 
         refreshIncomingInvites(incomingPage)
@@ -206,7 +210,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.declineInvite(inviteId);
+      await friendsClient.declineInvite(getToken(), inviteId);
       await refreshIncomingInvites(incomingPage);
       showNotification('success', 'Заявка отклонена');
     } catch (err) {
@@ -229,7 +233,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.declineInvite(inviteId);
+      await friendsClient.declineInvite(getToken(), inviteId);
       await refreshOutgoingInvites(outgoingPage);
       showNotification('success', 'Заявка отозвана');
     } catch (err) {
@@ -252,7 +256,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.removeFriend(friendId);
+      await friendsClient.removeFriend(getToken(), friendId);
       await refreshFriends(friendsPage);
       showNotification('success', 'Друг удален');
     } catch (err) {

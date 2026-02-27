@@ -6,18 +6,13 @@ import type {
   CheckUserExistenceResponse
 } from './UsersContracts';
 import { config } from '../../config/env';
-import { fetchWithTimeout, handleResponse, STORAGE_KEY } from '../HttpClient';
+import { fetchWithTimeout, handleResponse } from '../HttpClient';
 
-const API_BASE = config.usersApiUrl;
-
-export interface UserSession {
-  token: string;
-  name: string;
-}
+const apiBaseUrl = config.usersApiUrl;
 
 export const usersClient = {
   signUp: async (data: SignUpRequest): Promise<SignUpResponse> => {
-    const response = await fetchWithTimeout(`${API_BASE}/v1/auth/sign-up`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/sign-up`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -26,7 +21,7 @@ export const usersClient = {
   },
 
   signIn: async (data: SignInRequest): Promise<SignInResponse> => {
-    const response = await fetchWithTimeout(`${API_BASE}/v1/auth/sign-in`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/sign-in`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -35,25 +30,12 @@ export const usersClient = {
   },
 
   checkUserExistence: async (username: string): Promise<CheckUserExistenceResponse> => {
-    const url = new URL(`${API_BASE}/v1/users/check-existence`);
+    const url = new URL(`${apiBaseUrl}/v1/users/check-existence`);
     url.searchParams.set('username', username);
 
     const response = await fetchWithTimeout(url.toString(), {
       method: 'GET'
     });
     return handleResponse<CheckUserExistenceResponse>(response);
-  },
-  
-  getSession: (): UserSession | null => {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : null;
-  },
-  
-  setSession: (session: UserSession): void => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  },
-  
-  clearSession: (): void => {
-    localStorage.removeItem(STORAGE_KEY);
   }
 };

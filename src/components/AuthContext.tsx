@@ -1,10 +1,14 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { usersClient } from '../api/users/UsersClient';
-import type { UserSession } from '../api/users/UsersClient';
 import type { ApiError } from '../api/ApiError';
 
-interface AuthContextType {
+interface UserSession {
+  token: string;
+  name: string;
+}
+
+interface AuthContext {
   user: UserSession | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -12,11 +16,13 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (name: string, password: string) => Promise<void>;
   logout: () => void;
+  getToken: () => string;
   lastError: ApiError | null;
   clearError: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const userSession = "user_session";
+const AuthContext = createContext<AuthContext | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserSession | null>(null);
@@ -25,7 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [lastError, setLastError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    const session = usersClient.getSession();
+    const session = getSession();
     setUser(session);
     setIsLoading(false);
   }, []);
@@ -39,7 +45,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         token: response.token,
         name: username 
       };
-      usersClient.setSession(session);
+      saveSession(session);
       setUser(session);
     } catch (err: any) {
       if (!err.getFieldError) {
@@ -87,11 +93,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    usersClient.clearSession();
+    clearSession();
     setUser(null);
   };
 
   const clearError = () => setLastError(null);
+
+  const getSession = (): UserSession | null => {
+    const data = localStorage.getItem(userSession);
+    return data ? JSON.parse(data) : null;
+  };
+
+  const saveSession = (session: UserSession): void => {
+    localStorage.setItem(userSession, JSON.stringify(session));
+    setUser(session);
+  };
+
+  const clearSession = (): void => {
+    localStorage.removeItem(userSession);
+    setUser(null);
+  };
+
+  const getToken = (): string => {
+    const session = getSession();
+    if (!session?.token) {
+      throw new Error('User not authenticated: no token available');
+    }
+    return session.token;
+  };
 
   return (
     <AuthContext.Provider value={{ 
@@ -102,6 +131,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       login, 
       register, 
       logout,
+      getToken,
       lastError,
       clearError
     }}>

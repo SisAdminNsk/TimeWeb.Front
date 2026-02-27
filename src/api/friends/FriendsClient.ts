@@ -6,37 +6,39 @@ import type {
   GetFriendListResponse
 } from './FriendsContracts';
 import { config } from '../../config/env';
-import { fetchWithTimeout, handleResponse, STORAGE_KEY } from '../HttpClient';
+import { fetchWithTimeout, handleResponse } from '../HttpClient';
 
-const API_BASE = config.friendsApiUrl;
+const apiBaseUrl = config.friendsApiUrl;
 
 export const friendsClient = {
-  sendInvite: async (recipientId: string): Promise<FriendshipInviteDto> => {
-    const response = await fetchWithTimeout(`${API_BASE}/v1/invites`, {
+  sendInvite: async (authToken: string, recipientId: string): Promise<FriendshipInviteDto> => {
+
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/invites`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(authToken),
       body: JSON.stringify({ recipientId } as SendFriendshipInviteRequest),
     });
     return handleResponse<FriendshipInviteDto>(response);
   },
 
-  acceptInvite: async (inviteId: string): Promise<FriendshipDto> => {
-    const response = await fetchWithTimeout(`${API_BASE}/v1/invites/${inviteId}/accept`, {
+  acceptInvite: async (authToken: string, inviteId: string): Promise<FriendshipDto> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/invites/${inviteId}/accept`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(authToken),
     });
     return handleResponse<FriendshipDto>(response);
   },
 
-  declineInvite: async (inviteId: string): Promise<FriendshipInviteDto> => {
-    const response = await fetchWithTimeout(`${API_BASE}/v1/invites/${inviteId}/decline`, {
+  declineInvite: async (authToken: string, inviteId: string): Promise<FriendshipInviteDto> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/invites/${inviteId}/decline`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(authToken),
     });
     return handleResponse<FriendshipInviteDto>(response);
   },
 
   getInvites: async (
+    authToken: string,
     incoming: boolean,
     pageNumber: number = 1,
     pageSize: number = 20
@@ -46,14 +48,15 @@ export const friendsClient = {
       pageNumber: pageNumber.toString(),
       pageSize: pageSize.toString(),
     });
-    const response = await fetchWithTimeout(`${API_BASE}/v1/invites?${params}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/invites?${params}`, {
       method: 'GET',
-      headers: getHeaders(),
+      headers: getHeaders(authToken),
     });
     return handleResponse<GetFriendshipInviteListResponse>(response);
   },
 
   getFriends: async (
+    authToken: string,
     pageNumber: number = 1,
     pageSize: number = 20
   ): Promise<GetFriendListResponse> => {
@@ -61,33 +64,25 @@ export const friendsClient = {
       pageNumber: pageNumber.toString(),
       pageSize: pageSize.toString(),
     });
-    const response = await fetchWithTimeout(`${API_BASE}/v1/friends?${params}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/friends?${params}`, {
       method: 'GET',
-      headers: getHeaders(),
+      headers: getHeaders(authToken),
     });
     return handleResponse<GetFriendListResponse>(response);
   },
 
-  removeFriend: async (friendId: string): Promise<FriendshipDto> => {
-    const response = await fetchWithTimeout(`${API_BASE}/v1/friends/${friendId}/remove`, {
+  removeFriend: async (authToken: string, friendId: string): Promise<FriendshipDto> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/friends/${friendId}/remove`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: getHeaders(authToken),
     });
     return handleResponse<FriendshipDto>(response);
-  },
+  }
 };
 
-/**
- * Получает заголовки авторизации из localStorage
- */
-export function getHeaders(): HeadersInit {
-  const session = localStorage.getItem(STORAGE_KEY);
-  if (session) {
-    const { token } = JSON.parse(session);
-    return { 
-      'Authorization': `Bearer ${token}`, 
+function getHeaders(authToken: string | null): HeadersInit {
+  return { 
+      'Authorization': `Bearer ${authToken}`, 
       'Content-Type': 'application/json' 
     };
-  }
-  return { 'Content-Type': 'application/json' };
 }
