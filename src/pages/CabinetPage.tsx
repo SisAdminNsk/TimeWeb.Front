@@ -4,6 +4,13 @@ import { FriendsProvider } from '../context/FriendsContext';
 import { FriendsWidget } from '../components/FriendsWidget';
 import { theme } from '../styles/theme';
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const isValidEmail = (email: string): boolean => {
+  if (!email || email.trim() === '') return false;
+  return emailRegex.test(email.trim());
+};
+
 export const CabinetPage = () => {
   const { userData, isLoading, updateUserData } = useCabinet();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
@@ -13,6 +20,8 @@ export const CabinetPage = () => {
     birthDate: '',
     gender: '',
   });
+  const [emailError, setEmailError] = useState<string>('');
+  const [isEmailTouched, setIsEmailTouched] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -21,8 +30,22 @@ export const CabinetPage = () => {
         birthDate: userData.birthDate || '',
         gender: userData.gender || '',
       });
+      setEmailError('');
+      setIsEmailTouched(false);
     }
   }, [userData]);
+
+  useEffect(() => {
+    if (isEmailTouched && formData.email) {
+      if (!isValidEmail(formData.email)) {
+        setEmailError('Введите корректный email адрес');
+      } else {
+        setEmailError('');
+      }
+    } else {
+      setEmailError('');
+    }
+  }, [formData.email, isEmailTouched]);
 
   if (isLoading) {
     return (
@@ -56,6 +79,8 @@ export const CabinetPage = () => {
       });
     }
     setIsEditing(true);
+    setEmailError('');
+    setIsEmailTouched(false);
   };
 
   const handleCancelClick = () => {
@@ -67,17 +92,40 @@ export const CabinetPage = () => {
         gender: userData.gender || '',
       });
     }
+    setEmailError('');
+    setIsEmailTouched(false);
   };
 
   const handleSaveClick = async () => {
+    if (!isValidEmail(formData.email)) {
+      setEmailError('Введите корректный email адрес');
+      setIsEmailTouched(true);
+      return;
+    }
+
     await updateUserData(formData);
     setIsEditing(false);
+    setEmailError('');
+    setIsEmailTouched(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'email' && !isEmailTouched) {
+      setIsEmailTouched(true);
+    }
   };
+
+  const handleEmailBlur = () => {
+    setIsEmailTouched(true);
+    if (formData.email && !isValidEmail(formData.email)) {
+      setEmailError('Введите корректный email адрес');
+    }
+  };
+
+  const isSaveDisabled = isEditing && (!isValidEmail(formData.email) || emailError !== '');
 
   const containerStyle: React.CSSProperties = {
     animation: 'fadeIn 0.4s ease-out',
@@ -129,11 +177,11 @@ export const CabinetPage = () => {
 
   const fieldStyle: React.CSSProperties = {
     fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
+    fontWeight: typography.fontWeight.medium,
     color: colors.gray900,
     padding: `${spacing.sm} ${spacing.md}`,
     borderRadius: borderRadius.md,
-    border: `1px solid ${colors.gray200}`,
+    border: `1px solid ${colors.gray300}`,
     height: '40px',
     display: 'flex',
     alignItems: 'center',
@@ -141,14 +189,14 @@ export const CabinetPage = () => {
     width: '100%',
     margin: 0,
     lineHeight: 1.5,
-    fontFamily: 'inherit',
+    fontFamily: typography.fontFamily,
     backgroundColor: colors.white,
     cursor: 'default',
     opacity: 1,
     WebkitTextFillColor: colors.gray900,
     outline: 'none',
     userSelect: 'none',
-    transition: `all ${transitions.normal}`,
+    transition: `all ${transitions.fast}`,
   };
 
   const fieldDisabledStyle: React.CSSProperties = {
@@ -158,14 +206,26 @@ export const CabinetPage = () => {
     opacity: 0.7,
   };
 
+  const fieldErrorStyle: React.CSSProperties = {
+    ...fieldStyle,
+    borderColor: colors.error,
+    backgroundColor: colors.errorLight,
+  };
+
   const selectStyle: React.CSSProperties = {
     ...fieldStyle,
-    cursor: 'default',
+    cursor: 'pointer',
     appearance: 'none',
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='${colors.gray500}' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'right 12px center',
     outline: 'none',
+  };
+
+  const errorTextStyle: React.CSSProperties = {
+    fontSize: typography.fontSize.xs,
+    color: colors.error,
+    marginTop: spacing.xs,
   };
 
   const buttonGroupStyle: React.CSSProperties = {
@@ -186,6 +246,13 @@ export const CabinetPage = () => {
     cursor: 'pointer',
     fontWeight: typography.fontWeight.medium,
     transition: `all ${transitions.normal}`,
+  };
+
+  const buttonDisabledStyle: React.CSSProperties = {
+    ...buttonPrimaryStyle,
+    backgroundColor: colors.gray300,
+    cursor: 'not-allowed',
+    opacity: 0.6,
   };
 
   const buttonSecondaryStyle: React.CSSProperties = {
@@ -227,17 +294,21 @@ export const CabinetPage = () => {
               name="email"
               value={isEditing ? formData.email : (userData?.email || 'Не указан')}
               onChange={handleInputChange}
+              onBlur={handleEmailBlur}
               readOnly={!isEditing}
               placeholder="example@mail.com"
-              style={fieldStyle}
+              style={isEditing && emailError ? fieldErrorStyle : fieldStyle}
               onFocus={(e) => {
                 e.currentTarget.style.outline = 'none';
-                e.currentTarget.style.borderColor = colors.gray200;
+                e.currentTarget.style.borderColor = emailError ? colors.error : colors.primary;
               }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = colors.gray200;
-              }}
+              disabled={!isEditing}
             />
+            {isEditing && emailError && (
+              <div style={errorTextStyle}>
+                {emailError}
+              </div>
+            )}
           </div>
 
           <div style={infoItemStyle}>
@@ -251,10 +322,10 @@ export const CabinetPage = () => {
                 style={fieldStyle}
                 onFocus={(e) => {
                   e.currentTarget.style.outline = 'none';
-                  e.currentTarget.style.borderColor = colors.gray200;
+                  e.currentTarget.style.borderColor = colors.primary;
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = colors.gray200;
+                  e.currentTarget.style.borderColor = colors.gray300;
                 }}
               />
             ) : (
@@ -274,10 +345,10 @@ export const CabinetPage = () => {
                 style={selectStyle}
                 onFocus={(e) => {
                   e.currentTarget.style.outline = 'none';
-                  e.currentTarget.style.borderColor = colors.gray200;
+                  e.currentTarget.style.borderColor = colors.primary;
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = colors.gray200;
+                  e.currentTarget.style.borderColor = colors.gray300;
                 }}
               >
                 <option value="">Не указан</option>
@@ -304,12 +375,17 @@ export const CabinetPage = () => {
               <>
                 <button 
                   onClick={handleSaveClick}
-                  style={buttonPrimaryStyle}
+                  disabled={isSaveDisabled}
+                  style={isSaveDisabled ? buttonDisabledStyle : buttonPrimaryStyle}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.primaryDark;
+                    if (!isSaveDisabled) {
+                      e.currentTarget.style.backgroundColor = colors.primaryDark;
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.primary;
+                    if (!isSaveDisabled) {
+                      e.currentTarget.style.backgroundColor = colors.primary;
+                    }
                   }}
                 >
                   Сохранить

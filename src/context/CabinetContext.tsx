@@ -29,6 +29,12 @@ interface CabinetProviderProps {
   children: ReactNode;
 }
 
+const isValidEmail = (email: string | null | undefined): boolean => {
+  if (!email || email.trim() === '') return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+};
+
 export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) => {
   const { user, isAuthenticated, getToken, handleUnauthorized } = useAuth();
   const [userData, setUserData] = useState<CabinetUserData | null>(null);
@@ -91,10 +97,18 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
       throw new Error('User not authenticated');
     }
 
+    if (data.email !== undefined && data.email !== null) {
+      if (data.email.trim() === '') {
+        throw new Error('Email не может быть пустым');
+      }
+      if (!isValidEmail(data.email)) {
+        throw new Error('Некорректный формат email адреса');
+      }
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      // Валидация и нормализация даты рождения
       let birthdate: string | null = null;
       if (data.birthDate && data.birthDate.trim() !== '') {
         const date = new Date(data.birthDate);
@@ -104,7 +118,7 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
       }
 
       const updateRequest: UpdateProfileRequest = {
-        email: data.email ?? null,
+        email: data.email?.trim() ?? null,
         birthdate: birthdate,
         gender: data.gender ?? null,
       };
@@ -112,7 +126,9 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
       const token = getToken();
       await usersClient.updateProfile(token, getIdFromJwt(token), updateRequest);
 
-      setUserData((prev) => (prev ? { ...prev, ...data } : null));
+      setUserData((prev) => 
+        prev ? { ...prev, ...data, email: data.email?.trim() ?? prev.email } : null
+      );
     } catch (err) {
       const apiError = err as ApiError;
       if (handleUnauthorized(apiError)) {
