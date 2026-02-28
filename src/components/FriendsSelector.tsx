@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFriends } from './FriendsContext';
 import { theme } from '../styles/theme';
+import type { FriendshipDto } from '../api/friends/FriendsContracts';
 
 interface FriendsSelectorProps {
   selectedFriendIds: string[];
@@ -47,11 +48,6 @@ export const FriendsSelector: React.FC<FriendsSelectorProps> = ({
     if (newPage < 1 || newPage > totalPages) return;
     setCurrentPage(newPage);
     await refreshFriends(newPage);
-  };
-
-  const getFriendName = (friend: any) => {
-    if (!friend) return 'Неизвестно';
-    return `Друг (${friend.friendId?.substring(0, 8)}...)`;
   };
 
   const styles = {
@@ -188,7 +184,7 @@ export const FriendsSelector: React.FC<FriendsSelectorProps> = ({
         ) : friends.length === 0 ? (
           <div style={styles.empty}>У вас пока нет друзей</div>
         ) : (
-          friends.map(friend => (
+          friends.map((friend: FriendshipDto) => (
             <div
               key={friend.friendId}
               style={styles.friendItem(localSelectedIds.includes(friend.friendId))}
@@ -203,7 +199,7 @@ export const FriendsSelector: React.FC<FriendsSelectorProps> = ({
                 onClick={(e) => e.stopPropagation()}
               />
               <div style={{ flex: 1 }}>
-                <div style={styles.friendName}>{getFriendName(friend)}</div>
+                <div style={styles.friendName}>{friend.friendName || 'Неизвестно'}</div>
                 <div style={styles.friendMeta}>
                   {friend.friendshipStartDate 
                     ? new Date(friend.friendshipStartDate).toLocaleDateString('ru-RU') 

@@ -6,11 +6,14 @@ export interface FriendshipInviteDto {
   id: string;
   initiatorId: string;
   recipientId: string;
+  initiatorName: string;
+  recipientName: string;
   status: 'Pending' | 'Accepted' | 'Declined';
 }
 
 export interface FriendshipDto {
   friendId: string;
+  friendName: string;
   friendshipStartDate: string;
 }
 

@@ -480,7 +480,6 @@ export const EventsList: React.FC<EventsListProps> = ({
         </div>
       )}
 
-      {/* Анимации для модального окна */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }

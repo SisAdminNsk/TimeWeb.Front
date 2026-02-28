@@ -20,3 +20,21 @@ export interface SignInResponse {
 export interface CheckUserExistenceResponse{
   userId: string;
 }
+
+export interface UserDto{
+  id: string,
+  name: string,
+  createdAt: string
+}
+
+export interface GetUserResponse{
+  user: UserDto
+}
+
+export interface GetUsersRequest{
+  usersIds: string[]
+}
+
+export interface GetUsersResponse{
+  users: UserDto[]
+}

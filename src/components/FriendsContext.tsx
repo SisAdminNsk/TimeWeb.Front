@@ -172,7 +172,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const checkUserExistenceResponse = await usersClient.checkUserExistence(username);
+      const checkUserExistenceResponse = await usersClient.checkUserExistence(getToken(), username);
       const userId = checkUserExistenceResponse.userId;
       await friendsClient.sendInvite(getToken(), userId);
       await refreshOutgoingInvites(outgoingPage);
@@ -185,7 +185,6 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         showNotification('error', apiError.errorMessage || 'Ошибка валидации');
       } else {
         showNotification('error', apiError.errorMessage || 'Ошибка при отправке заявки');
-
       }
       if(handleUnauthorized(apiError)){
         return;

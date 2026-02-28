@@ -4,10 +4,24 @@ import { theme } from '../styles/theme';
 
 type TabType = 'friends' | 'incoming' | 'outgoing' | 'add';
 
+interface DeleteModalState {
+  isOpen: boolean;
+  itemId: string | null;
+  itemName: string | null;
+  actionType: 'removeFriend' | 'declineInvite' | 'declineOutgoing' | null;
+}
+
 export const FriendsWidget = () => {
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [usernameInput, setUsernameInput] = useState('');
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  
+  const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
+    isOpen: false,
+    itemId: null,
+    itemName: null,
+    actionType: null,
+  });
   
   const {
     friends,
@@ -64,28 +78,56 @@ export const FriendsWidget = () => {
     }
   };
 
-  const handleDeclineInvite = async (inviteId: string) => {
+  const handleRemoveFriendClick = (friendId: string, friendName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      itemId: friendId,
+      itemName: friendName,
+      actionType: 'removeFriend',
+    });
+  };
+
+  const handleDeclineInviteClick = (inviteId: string, inviteName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      itemId: inviteId,
+      itemName: inviteName,
+      actionType: 'declineInvite',
+    });
+  };
+
+  const handleDeclineOutgoingInviteClick = (inviteId: string, inviteName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      itemId: inviteId,
+      itemName: inviteName,
+      actionType: 'declineOutgoing',
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal.itemId || !deleteModal.actionType) return;
+    
     try {
-      await declineInvite(inviteId);
+      switch (deleteModal.actionType) {
+        case 'removeFriend':
+          await removeFriend(deleteModal.itemId);
+          break;
+        case 'declineInvite':
+          await declineInvite(deleteModal.itemId);
+          break;
+        case 'declineOutgoing':
+          await declineOutgoingInvite(deleteModal.itemId);
+          break;
+      }
+      setDeleteModal({ isOpen: false, itemId: null, itemName: null, actionType: null });
     } catch (err) {
-      console.error('Failed to decline invite:', err);
+      console.error('Failed to perform action:', err);
     }
   };
 
-  const handleDeclineOutgoingInvite = async (inviteId: string) => {
-    try {
-      await declineOutgoingInvite(inviteId);
-    } catch (err) {
-      console.error('Failed to decline outgoing invite:', err);
-    }
-  };
-
-  const handleRemoveFriend = async (friendId: string) => {
-    try {
-      await removeFriend(friendId);
-    } catch (err) {
-      console.error('Failed to remove friend:', err);
-    }
+  const handleDeleteCancel = () => {
+    setDeleteModal({ isOpen: false, itemId: null, itemName: null, actionType: null });
   };
 
   const handleRefreshAll = async () => {
@@ -129,17 +171,16 @@ export const FriendsWidget = () => {
   const getInviteName = (invite: any, isIncoming: boolean) => {
     if (!invite) return 'Неизвестно';
     if (isIncoming) {
-      return `Пользователь (${invite.initiatorId?.substring(0, 8)}...)`;
+      return invite.initiatorName || `Пользователь (${invite.initiatorId?.substring(0, 8)}...)`;
     } else {
-      return `Пользователь (${invite.recipientId?.substring(0, 8)}...)`;
+      return invite.recipientName || `Пользователь (${invite.recipientId?.substring(0, 8)}...)`;
     }
   };
 
   const getFriendName = (friend: any) => {
     if (!friend) return 'Неизвестно';
-    return `Друг (${friend.friendId?.substring(0, 8)}...)`;
+    return friend.friendName || `Пользователь (${friend.friendId?.substring(0, 8)}...)`;
   };
-
 
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
 
@@ -379,6 +420,109 @@ export const FriendsWidget = () => {
       fontSize: typography.fontSize.xs,
       color: colors.gray400,
     } as React.CSSProperties,
+
+    // ✅ Стили для модального окна (аналогично EventsList)
+    modalOverlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      animation: 'fadeIn 0.2s ease',
+    } as React.CSSProperties,
+    
+    modalContent: {
+      backgroundColor: colors.white,
+      borderRadius: borderRadius.lg,
+      boxShadow: shadows.xl,
+      padding: spacing.lg,
+      maxWidth: '400px',
+      width: '90%',
+      animation: 'slideIn 0.2s ease',
+    } as React.CSSProperties,
+    
+    modalHeader: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    } as React.CSSProperties,
+    
+    modalIcon: {
+      width: '40px',
+      height: '40px',
+      backgroundColor: colors.errorLight,
+      borderRadius: borderRadius.full,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    } as React.CSSProperties,
+    
+    modalIconSvg: {
+      width: '20px',
+      height: '20px',
+      color: colors.error,
+    } as React.CSSProperties,
+    
+    modalTitle: {
+      margin: 0,
+      fontSize: typography.fontSize.lg,
+      fontWeight: typography.fontWeight.semibold,
+      color: colors.gray900,
+    } as React.CSSProperties,
+    
+    modalMessage: {
+      fontSize: typography.fontSize.base,
+      color: colors.gray600,
+      marginBottom: spacing.lg,
+      lineHeight: 1.5,
+    } as React.CSSProperties,
+    
+    modalEventName: {
+      fontSize: typography.fontSize.base,
+      fontWeight: typography.fontWeight.semibold,
+      color: colors.gray900,
+      backgroundColor: colors.gray100,
+      padding: `${spacing.xs} ${spacing.sm}`,
+      borderRadius: borderRadius.md,
+      display: 'inline-block',
+      marginTop: spacing.sm,
+    } as React.CSSProperties,
+    
+    modalActions: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: spacing.sm,
+    } as React.CSSProperties,
+    
+    modalButtonCancel: {
+      backgroundColor: 'transparent',
+      color: colors.gray700,
+      border: `1px solid ${colors.gray300}`,
+      borderRadius: borderRadius.md,
+      padding: `${spacing.sm} ${spacing.lg}`,
+      fontSize: typography.fontSize.sm,
+      fontWeight: typography.fontWeight.medium,
+      cursor: 'pointer',
+      transition: `all ${transitions.normal}`,
+    } as React.CSSProperties,
+    
+    modalButtonDelete: {
+      backgroundColor: colors.error,
+      color: colors.white,
+      border: 'none',
+      borderRadius: borderRadius.md,
+      padding: `${spacing.sm} ${spacing.lg}`,
+      fontSize: typography.fontSize.sm,
+      fontWeight: typography.fontWeight.medium,
+      cursor: 'pointer',
+      transition: `all ${transitions.normal}`,
+    } as React.CSSProperties,
   };
 
   const friendsList = Array.isArray(friends) ? friends : [];
@@ -439,8 +583,18 @@ export const FriendsWidget = () => {
               </div>
               <button
                 style={styles.button('danger', isLoading)}
-                onClick={() => handleRemoveFriend(friend.friendId)}
+                onClick={() => handleRemoveFriendClick(friend.friendId, getFriendName(friend))}
                 disabled={isLoading}
+                onMouseOver={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.errorDark;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.error;
+                  }
+                }}
               >
                 Удалить
               </button>
@@ -467,7 +621,7 @@ export const FriendsWidget = () => {
             <div>
               <div style={styles.itemName}>{getInviteName(invite, true)}</div>
               <div style={styles.itemMeta}>
-                ID: {invite.initiatorId?.substring(0, 8)}...
+                {invite.initiatorName ? `ID: ${invite.initiatorId?.substring(0, 8)}...` : `От: ${invite.initiatorId?.substring(0, 8)}...`}
               </div>
             </div>
             <div style={styles.buttonGroup}>
@@ -476,14 +630,34 @@ export const FriendsWidget = () => {
                 onClick={() => handleAcceptInvite(invite.id)}
                 disabled={isLoading || isRefreshingAll}
                 title="Принять"
+                onMouseOver={(e) => {
+                  if (!isLoading && !isRefreshingAll) {
+                    e.currentTarget.style.backgroundColor = colors.successDark;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isLoading && !isRefreshingAll) {
+                    e.currentTarget.style.backgroundColor = colors.success;
+                  }
+                }}
               >
                 ✓
               </button>
               <button
                 style={styles.button('danger', isLoading || isRefreshingAll)}
-                onClick={() => handleDeclineInvite(invite.id)}
+                onClick={() => handleDeclineInviteClick(invite.id, getInviteName(invite, true))}
                 disabled={isLoading || isRefreshingAll}
                 title="Отклонить"
+                onMouseOver={(e) => {
+                  if (!isLoading && !isRefreshingAll) {
+                    e.currentTarget.style.backgroundColor = colors.errorDark;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isLoading && !isRefreshingAll) {
+                    e.currentTarget.style.backgroundColor = colors.error;
+                  }
+                }}
               >
                 ✕
               </button>
@@ -510,13 +684,23 @@ export const FriendsWidget = () => {
             <div>
               <div style={styles.itemName}>{getInviteName(invite, false)}</div>
               <div style={styles.itemMeta}>
-                ID: {invite.recipientId?.substring(0, 8)}...
+                {invite.recipientName ? `ID: ${invite.recipientId?.substring(0, 8)}...` : `Кому: ${invite.recipientId?.substring(0, 8)}...`}
               </div>
             </div>
             <button
               style={styles.button('secondary', isLoading)}
-              onClick={() => handleDeclineOutgoingInvite(invite.id)}
+              onClick={() => handleDeclineOutgoingInviteClick(invite.id, getInviteName(invite, false))}
               disabled={isLoading}
+              onMouseOver={(e) => {
+                if (!isLoading) {
+                  e.currentTarget.style.backgroundColor = colors.gray600;
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!isLoading) {
+                  e.currentTarget.style.backgroundColor = colors.gray500;
+                }
+              }}
             >
               Отозвать
             </button>
@@ -555,12 +739,61 @@ export const FriendsWidget = () => {
             fontWeight: typography.fontWeight.semibold,
           }}
           disabled={isLoading || !usernameInput.trim()}
+          onMouseOver={(e) => {
+            if (!isLoading && usernameInput.trim()) {
+              e.currentTarget.style.backgroundColor = colors.primaryDark;
+            }
+          }}
+          onMouseOut={(e) => {
+            if (!isLoading && usernameInput.trim()) {
+              e.currentTarget.style.backgroundColor = colors.primary;
+            }
+          }}
         >
           {isLoading ? 'Отправка...' : 'Отправить заявку'}
         </button>
       </form>
     </div>
   );
+
+  const getModalTitle = () => {
+    switch (deleteModal.actionType) {
+      case 'removeFriend':
+        return 'Удалить друга?';
+      case 'declineInvite':
+        return 'Отклонить заявку?';
+      case 'declineOutgoing':
+        return 'Отозвать заявку?';
+      default:
+        return 'Подтверждение';
+    }
+  };
+
+  const getModalMessage = () => {
+    switch (deleteModal.actionType) {
+      case 'removeFriend':
+        return 'Вы уверены, что хотите удалить этого друга? Это действие нельзя отменить.';
+      case 'declineInvite':
+        return 'Вы уверены, что хотите отклонить эту заявку?';
+      case 'declineOutgoing':
+        return 'Вы уверены, что хотите отозвать эту заявку?';
+      default:
+        return 'Вы уверены?';
+    }
+  };
+
+  const getConfirmButtonText = () => {
+    switch (deleteModal.actionType) {
+      case 'removeFriend':
+        return isLoading ? 'Удаление...' : 'Удалить';
+      case 'declineInvite':
+        return isLoading ? 'Отклонение...' : 'Отклонить';
+      case 'declineOutgoing':
+        return isLoading ? 'Отмена...' : 'Отозвать';
+      default:
+        return 'Подтвердить';
+    }
+  };
 
   return (
     <div style={styles.widget}>
@@ -675,6 +908,81 @@ export const FriendsWidget = () => {
         {!isLoading && activeTab === 'outgoing' && renderOutgoingInvites()}
         {!isLoading && activeTab === 'add' && renderAddFriend()}
       </div>
+
+      {deleteModal.isOpen && (
+        <div style={styles.modalOverlay} onClick={handleDeleteCancel}>
+          <div 
+            style={styles.modalContent} 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={styles.modalHeader}>
+              <div style={styles.modalIcon}>
+                <svg 
+                  style={styles.modalIconSvg}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
+                  />
+                </svg>
+              </div>
+              <h3 style={styles.modalTitle}>{getModalTitle()}</h3>
+            </div>
+            
+            <p style={styles.modalMessage}>
+              {getModalMessage()}
+            </p>
+            
+            {deleteModal.itemName && (
+              <div style={styles.modalEventName}>
+                {deleteModal.itemName}
+              </div>
+            )}
+            
+            <div style={styles.modalActions}>
+              <button
+                style={styles.modalButtonCancel}
+                onClick={handleDeleteCancel}
+                disabled={isLoading}
+                onMouseOver={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.gray100;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                style={styles.modalButtonDelete}
+                onClick={handleDeleteConfirm}
+                disabled={isLoading}
+                onMouseOver={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.errorDark;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.error;
+                  }
+                }}
+              >
+                {getConfirmButtonText()}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <style>{`
         @keyframes spin {
@@ -693,11 +1001,21 @@ export const FriendsWidget = () => {
           }
         }
         
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
         .friends-widget button:focus {
           outline: none !important;
         }
         
-        /* ✅ Кастомный скроллбар для контента виджета */
         .friends-widget-content::-webkit-scrollbar {
           width: 6px;
         }

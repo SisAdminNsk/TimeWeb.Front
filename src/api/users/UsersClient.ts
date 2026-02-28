@@ -3,7 +3,10 @@ import type {
   SignUpResponse, 
   SignInRequest, 
   SignInResponse,
-  CheckUserExistenceResponse
+  CheckUserExistenceResponse,
+  GetUserResponse,
+  GetUsersResponse,
+  GetUsersRequest
 } from './UsersContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -29,13 +32,34 @@ export const usersClient = {
     return handleResponse<SignInResponse>(response);
   },
 
-  checkUserExistence: async (username: string): Promise<CheckUserExistenceResponse> => {
+  checkUserExistence: async (authToken: string, username: string): Promise<CheckUserExistenceResponse> => {
     const url = new URL(`${apiBaseUrl}/v1/users/check-existence`);
     url.searchParams.set('username', username);
 
     const response = await fetchWithTimeout(url.toString(), {
-      method: 'GET'
+      method: 'GET',
+      headers: {'Authorization': `Bearer ${authToken}`}
     });
     return handleResponse<CheckUserExistenceResponse>(response);
+  },
+
+  getUser: async (authToken: string, userId: string): Promise<GetUserResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/${userId}`, {
+      method: 'GET',
+      headers: {'Authorization': `Bearer ${authToken}`}
+    });
+    return handleResponse<GetUserResponse>(response);
+  },
+
+  getUsers: async (authToken: string, request: GetUsersRequest): Promise<GetUsersResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+    return handleResponse<GetUsersResponse>(response);
   }
 };
