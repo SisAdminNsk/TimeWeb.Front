@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useFriends } from './FriendsContext';
+import { useFriends } from '../context/FriendsContext';
 import { theme } from '../styles/theme';
 
 type TabType = 'friends' | 'incoming' | 'outgoing' | 'add';
@@ -284,6 +284,16 @@ export const FriendsWidget = () => {
       fontSize: typography.fontSize.xs,
       color: colors.gray400,
       marginTop: spacing.xs,
+    } as React.CSSProperties,
+
+    itemDescription: {
+      fontSize: typography.fontSize.xs,
+      color: colors.gray500,
+      marginTop: spacing.xs || '2px',
+      fontStyle: 'italic',
+      display: 'flex',
+      alignItems: 'center',
+      gap: spacing.xs || '2px',
     } as React.CSSProperties,
     
     buttonGroup: {
@@ -620,8 +630,8 @@ export const FriendsWidget = () => {
           <div key={invite.id} style={styles.item}>
             <div>
               <div style={styles.itemName}>{getInviteName(invite, true)}</div>
-              <div style={styles.itemMeta}>
-                {invite.initiatorName ? `ID: ${invite.initiatorId?.substring(0, 8)}...` : `От: ${invite.initiatorId?.substring(0, 8)}...`}
+              <div style={styles.itemDescription}>
+                <span>Отправил вам запрос в друзья</span>
               </div>
             </div>
             <div style={styles.buttonGroup}>
@@ -683,8 +693,8 @@ export const FriendsWidget = () => {
           <div key={invite.id} style={styles.item}>
             <div>
               <div style={styles.itemName}>{getInviteName(invite, false)}</div>
-              <div style={styles.itemMeta}>
-                {invite.recipientName ? `ID: ${invite.recipientId?.substring(0, 8)}...` : `Кому: ${invite.recipientId?.substring(0, 8)}...`}
+              <div style={styles.itemDescription}>
+                <span>Вы отправили запрос в друзья</span>
               </div>
             </div>
             <button

@@ -6,7 +6,10 @@ import type {
   CheckUserExistenceResponse,
   GetUserResponse,
   GetUsersResponse,
-  GetUsersRequest
+  GetUsersRequest,
+  GetProfileResponse,
+  UpdateProfileRequest,
+  UpdateProfileResponse
 } from './UsersContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -61,5 +64,24 @@ export const usersClient = {
       body: JSON.stringify(request)
     });
     return handleResponse<GetUsersResponse>(response);
-  }
-};
+  },
+
+   getProfile: async (authToken: string, userId: string): Promise<GetProfileResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/profiles/${userId}`, {
+      method: 'GET',
+      headers: {'Authorization': `Bearer ${authToken}`}
+    });
+    return handleResponse<GetProfileResponse>(response);
+  },
+
+  updateProfile: async (authToken: string, userId: string, request: UpdateProfileRequest): Promise<UpdateProfileResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/profiles/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'},
+      body: JSON.stringify(request)
+    });
+    return handleResponse<UpdateProfileResponse>(response);
+  },
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './components/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { CabinetProvider } from './context/CabinetContext';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { LayoutPage } from './pages/LayoutPage';
@@ -111,7 +112,11 @@ export const App = () => {
             />
             <Route 
               path="cabinet" 
-              element={<CabinetPage />} 
+              element={
+                <CabinetProvider>
+                  <CabinetPage />
+                </CabinetProvider>
+              } 
             />
             <Route 
               path="events" 

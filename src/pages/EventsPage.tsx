@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { EventsProvider, useEvents } from '../components/EventsContext';
-import { FriendsProvider } from '../components/FriendsContext';
+import { EventsProvider, useEvents } from '../context/EventsContext';
+import { FriendsProvider } from '../context/FriendsContext';
 import { CalendarWidget } from '../components/CalendarWidget';
 import { EventsList } from '../components/EventList';
 import { AddEventModal } from '../components/AddEventModal';

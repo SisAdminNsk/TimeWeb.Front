@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useEvents } from './EventsContext';
-import { useFriends } from './FriendsContext';
+import { useEvents } from '../context/EventsContext';
+import { useFriends } from '../context/FriendsContext';
 import { theme } from '../styles/theme';
 
 interface EventsListProps {

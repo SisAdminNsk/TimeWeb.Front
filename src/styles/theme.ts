@@ -1,12 +1,10 @@
 export const theme = {
-  // Цветовая палитра
   colors: {
-    // Основные
+
     primary: '#667eea',
     primaryDark: '#5a67d8',
     primaryLight: '#764ba2',
     
-    // Нейтральные
     white: '#ffffff',
     gray50: '#f9fafb',
     gray100: '#f3f4f6',
@@ -19,7 +17,6 @@ export const theme = {
     gray800: '#1f2937',
     gray900: '#111827',
     
-    // Семантические
     success: '#10b981',
     successLight: '#d1fae5',
     successDark: '#059669',
@@ -36,7 +33,6 @@ export const theme = {
     infoLight: '#dbeafe',
     infoDark: '#2563eb',
     
-    // Sidebar
     sidebar: {
       bg: '#1e293b',
       bgDark: '#0f172a',
@@ -48,7 +44,6 @@ export const theme = {
     },
   },
   
-  // Типографика
   typography: {
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontSize: {
@@ -68,7 +63,6 @@ export const theme = {
     },
   },
   
-  // Отступы и размеры
   spacing: {
     xs: '4px',
     sm: '8px',
@@ -78,7 +72,6 @@ export const theme = {
     '2xl': '48px',
   },
   
-  // Границы
   borderRadius: {
     sm: '4px',
     md: '8px',
@@ -87,7 +80,6 @@ export const theme = {
     full: '9999px',
   },
   
-  // Тени
   shadows: {
     sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
     md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
@@ -95,7 +87,6 @@ export const theme = {
     xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
   },
   
-  // Переходы
   transitions: {
     fast: '0.15s ease',
     normal: '0.2s ease',
@@ -103,12 +94,10 @@ export const theme = {
   },
 };
 
-// Helper функции для создания стилей
 export const createStyles = () => {
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   
   return {
-    // Карточка
     card: {
       backgroundColor: colors.white,
       borderRadius: borderRadius.lg,
@@ -116,7 +105,6 @@ export const createStyles = () => {
       padding: spacing.lg,
     },
     
-    // Кнопка первичная
     buttonPrimary: {
       backgroundColor: colors.primary,
       color: colors.white,
@@ -128,7 +116,6 @@ export const createStyles = () => {
       transition: `all ${transitions.normal}`,
     },
     
-    // Кнопка вторичная
     buttonSecondary: {
       backgroundColor: 'transparent',
       color: colors.gray700,
@@ -140,7 +127,6 @@ export const createStyles = () => {
       transition: `all ${transitions.normal}`,
     },
     
-    // Input
     input: {
       width: '100%',
       padding: `${spacing.sm} ${spacing.md}`,
@@ -151,7 +137,6 @@ export const createStyles = () => {
       boxSizing: 'border-box' as const,
     },
     
-    // Label
     label: {
       display: 'block',
       fontSize: typography.fontSize.sm,

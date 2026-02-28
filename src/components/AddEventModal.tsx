@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useEvents } from './EventsContext';
+import { useEvents } from '../context/EventsContext';
 import { theme } from '../styles/theme';
 import { FriendsSelector } from './FriendsSelector';
 

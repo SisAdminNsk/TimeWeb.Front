@@ -38,3 +38,24 @@ export interface GetUsersRequest{
 export interface GetUsersResponse{
   users: UserDto[]
 }
+
+export interface UserProfileDto{
+  userId: string,
+  birthdate: string | null,
+  email: string | null,
+  gender: string | null
+}
+
+export interface GetProfileResponse{
+  profile: UserProfileDto
+}
+
+export interface UpdateProfileRequest{
+  birthdate: string | null,
+  email: string | null,
+  gender: string | null
+}
+
+export interface UpdateProfileResponse{
+  profile: UserProfileDto
+}

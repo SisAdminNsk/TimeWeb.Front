@@ -3,14 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { usersClient } from '../api/users/UsersClient';
 import type { ApiError } from '../api/ApiError';
+import { getIdFromJwt } from '../common/JwtHelper'
 
-interface UserSession {
+interface UserInfo {
   token: string;
   name: string;
+  registrationDate: string;
 }
 
 interface AuthContext {
-  user: UserSession | null;
+  user: UserInfo | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   isSubmitting: boolean;
@@ -28,7 +30,7 @@ const AuthContext = createContext<AuthContext | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<UserSession | null>(null);
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastError, setLastError] = useState<ApiError | null>(null);
@@ -43,10 +45,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLastError(null);
     setIsSubmitting(true);
     try {
-      const response = await usersClient.signIn({ username, password });
-      const session: UserSession = {
-        token: response.token,
+
+      const signInResponse = await usersClient.signIn({ username, password });
+      const token = signInResponse.token;
+      const getUserResponse = await usersClient.getUser(token, getIdFromJwt(token))
+
+      const session: UserInfo = {
+        token: signInResponse.token,
         name: username,
+        registrationDate: getUserResponse.user.createdAt
       };
       saveSession(session);
       setUser(session);
@@ -109,12 +116,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const clearError = () => setLastError(null);
 
-  const getSession = (): UserSession | null => {
+  const getSession = (): UserInfo | null => {
     const data = localStorage.getItem(userSession);
     return data ? JSON.parse(data) : null;
   };
 
-  const saveSession = (session: UserSession): void => {
+  const saveSession = (session: UserInfo): void => {
     localStorage.setItem(userSession, JSON.stringify(session));
     setUser(session);
   };
