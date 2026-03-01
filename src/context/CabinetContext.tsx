@@ -3,7 +3,11 @@ import type { ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { usersClient } from '../api/users/UsersClient';
 import type { ApiError } from '../api/ApiError';
-import type { GetProfileResponse, UpdateProfileRequest } from '../api/users/UsersContracts';
+import type { 
+  GetProfileResponse, 
+  UpdateProfileRequest
+} from '../api/users/UsersContracts';
+import { PROFILE_ATTRIBUTES } from '../api/users/UsersContracts'
 import { getIdFromJwt } from '../common/JwtHelper';
 
 export interface CabinetUserData {
@@ -44,13 +48,17 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
   const clearError = useCallback(() => setError(null), []);
 
   const mapProfileToUserData = useCallback(
-    (response: GetProfileResponse, currentUser: typeof user): CabinetUserData => ({
-      name: currentUser?.name || '',
-      email: response.profile.email || '',
-      birthDate: response.profile.birthdate || '',
-      gender: response.profile.gender || '',
-      registrationDate: currentUser?.registrationDate || new Date().toISOString(),
-    }),
+    (response: GetProfileResponse, currentUser: typeof user): CabinetUserData => {
+      const attributes = response.profile.attributes || {};
+      
+      return {
+        name: currentUser?.name || '',
+        email: attributes[PROFILE_ATTRIBUTES.Email] || '',
+        birthDate: attributes[PROFILE_ATTRIBUTES.Birthdate] || '',
+        gender: attributes[PROFILE_ATTRIBUTES.Gender] || '',
+        registrationDate: currentUser?.registrationDate || new Date().toISOString(),
+      };
+    },
     []
   );
 
@@ -65,7 +73,8 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
     setError(null);
     try {
       const token = getToken();
-      const profile = await usersClient.getProfile(token, getIdFromJwt(token));
+      const userId = getIdFromJwt(token);
+      const profile = await usersClient.getProfile(token, userId);
       setUserData(mapProfileToUserData(profile, user));
     } catch (err) {
       const apiError = err as ApiError;
@@ -109,26 +118,47 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
     setIsLoading(true);
     setError(null);
     try {
-      let birthdate: string | null = null;
-      if (data.birthDate && data.birthDate.trim() !== '') {
-        const date = new Date(data.birthDate);
-        if (!isNaN(date.getTime())) {
-          birthdate = date.toISOString();
+      const profileAttributes: Record<string, string> = {};
+
+      if (data.email !== undefined) {
+        profileAttributes[PROFILE_ATTRIBUTES.Email] = data.email?.trim() ?? '';
+      }
+
+      if (data.birthDate !== undefined) {
+        if (data.birthDate && data.birthDate.trim() !== '') {
+          const date = new Date(data.birthDate);
+          if (!isNaN(date.getTime())) {
+            profileAttributes[PROFILE_ATTRIBUTES.Birthdate] = date.toISOString();
+          } else {
+            profileAttributes[PROFILE_ATTRIBUTES.Birthdate] = '';
+          }
+        } else {
+          profileAttributes[PROFILE_ATTRIBUTES.Birthdate] = '';
         }
       }
 
+      if (data.gender !== undefined) {
+        profileAttributes[PROFILE_ATTRIBUTES.Gender] = data.gender ?? '';
+      }
+
       const updateRequest: UpdateProfileRequest = {
-        email: data.email?.trim() ?? null,
-        birthdate: birthdate,
-        gender: data.gender ?? null,
+        profileAttributes,
       };
 
       const token = getToken();
-      await usersClient.updateProfile(token, getIdFromJwt(token), updateRequest);
+      const userId = getIdFromJwt(token);
+      await usersClient.updateProfile(token, userId, updateRequest);
 
-      setUserData((prev) => 
-        prev ? { ...prev, ...data, email: data.email?.trim() ?? prev.email } : null
-      );
+      setUserData((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          ...data,
+          email: data.email !== undefined ? data.email.trim() : prev.email,
+          birthDate: data.birthDate !== undefined ? data.birthDate : prev.birthDate, 
+          gender: data.gender !== undefined ? data.gender : prev.gender,
+        };
+      });
     } catch (err) {
       const apiError = err as ApiError;
       if (handleUnauthorized(apiError)) {

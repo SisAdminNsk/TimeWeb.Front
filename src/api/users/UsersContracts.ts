@@ -39,23 +39,25 @@ export interface GetUsersResponse{
   users: UserDto[]
 }
 
-export interface UserProfileDto{
-  userId: string,
-  birthdate: string | null,
-  email: string | null,
-  gender: string | null
-}
-
 export interface GetProfileResponse{
-  profile: UserProfileDto
+  profile: ProfileDto
 }
 
-export interface UpdateProfileRequest{
-  birthdate: string | null,
-  email: string | null,
-  gender: string | null
+export interface ProfileDto {
+    userId: string;
+    attributes: Record<string, string>;
 }
 
-export interface UpdateProfileResponse{
-  profile: UserProfileDto
+export interface UpdateProfileRequest {
+    profileAttributes: Record<string, string>;
 }
+
+export interface UpdateProfileResponse {
+    profile: ProfileDto;
+}
+
+export const PROFILE_ATTRIBUTES = {
+  Email: 'base/email',
+  Birthdate: 'base/birthdate',
+  Gender: 'base/gender',
+} as const;
