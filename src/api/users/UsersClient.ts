@@ -9,7 +9,10 @@ import type {
   GetUsersRequest,
   GetProfileResponse,
   UpdateProfileRequest,
-  UpdateProfileResponse
+  UpdateProfileResponse,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
+  GetLoginsResponse
 } from './UsersContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -55,7 +58,7 @@ export const usersClient = {
   },
 
   getUsers: async (authToken: string, request: GetUsersRequest): Promise<GetUsersResponse> => {
-    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users}`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
@@ -83,5 +86,49 @@ export const usersClient = {
       body: JSON.stringify(request)
     });
     return handleResponse<UpdateProfileResponse>(response);
+  },
+
+  refresh: async (request: RefreshTokenRequest):  Promise<RefreshTokenResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'},
+      body: JSON.stringify(request)
+    });
+    return handleResponse<RefreshTokenResponse>(response);
+  },
+
+  logoutMe: async (authToken: string): Promise<void> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return handleResponse<void>(response);
+  },
+
+  getLogins: async (
+  authToken: string,
+  pageSize: number,
+  pageNumber: number,
+  isLogout: boolean
+  ): Promise<GetLoginsResponse> => {
+    const url = new URL(`${apiBaseUrl}/v1/auth/logins`);
+    
+    url.searchParams.set('pageSize', pageSize.toString());
+    url.searchParams.set('pageNumber', pageNumber.toString());
+    url.searchParams.set('isLogout', isLogout.toString());
+
+    const response = await fetchWithTimeout(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  
+    return handleResponse<GetLoginsResponse>(response);
   },
 }

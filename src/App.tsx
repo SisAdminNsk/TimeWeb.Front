@@ -2,11 +2,13 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CabinetProvider } from './context/CabinetContext';
+import { FriendsProvider } from './context/FriendsContext';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { LayoutPage } from './pages/LayoutPage';
 import { CabinetPage } from './pages/CabinetPage';
 import { EventsPage } from './pages/EventsPage';
+import { FriendsPage } from './pages/FriendsPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -121,6 +123,14 @@ export const App = () => {
             <Route 
               path="events" 
               element={<EventsPage />} 
+            />
+            <Route 
+              path="friends" 
+              element={
+                <FriendsProvider>
+                  <FriendsPage />
+                </FriendsProvider>
+              } 
             />
           </Route>
           

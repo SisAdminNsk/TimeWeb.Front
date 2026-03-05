@@ -44,8 +44,16 @@ export async function handleResponse<T>(response: Response): Promise<T> {
     });
     throw apiError;
   }
+  
   if (response.status === 204) return undefined as T;
-  return await response.json() as T;
+
+  const contentLength = response.headers.get('content-length');
+  if (contentLength === '0') return undefined as T;
+
+  const text = await response.text();
+  if (!text || text.trim() === '') return undefined as T;
+  
+  return JSON.parse(text) as T;
 }
 
 export { REQUEST_TIMEOUT };

@@ -51,7 +51,7 @@ const FriendsContext = createContext<FriendsContextType | undefined>(undefined);
 
 export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
-  const { getToken, handleUnauthorized } = useAuth();
+  const { executeWithAuth } = useAuth();
 
   const [friends, setFriends] = useState<FriendshipDto[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<FriendshipInviteDto[]>([]);
@@ -79,7 +79,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshFriends = useCallback(async (page: number = 1) => {
     try {
-      const response = await friendsClient.getFriends(getToken(), page, PAGE_SIZE);
+      const response = await executeWithAuth((token) => friendsClient.getFriends(token, page, PAGE_SIZE));
       setFriends(response.friends);
       setFriendsTotalCount(response.totalCount);
       
@@ -90,7 +90,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         newPage = 1;
       } else if (page > newTotalPages) {
         newPage = newTotalPages;
-        const correctedResponse = await friendsClient.getFriends(getToken(), newPage, PAGE_SIZE);
+        const correctedResponse = await executeWithAuth((token) => friendsClient.getFriends(token, newPage, PAGE_SIZE));
         setFriends(correctedResponse.friends);
         setFriendsTotalCount(correctedResponse.totalCount);
       }
@@ -98,16 +98,15 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       setFriendsPage(newPage);
     } catch (err) {
       let apiError = err as ApiError;
-      if(handleUnauthorized(apiError)){
-        return;
+      if(apiError.statusCode !== 401) {
+        setError(apiError);
       }
-      setError(apiError);
     }
-  }, []);
+  }, [executeWithAuth]);
 
   const refreshIncomingInvites = useCallback(async (page: number = 1) => {
     try {
-      const response = await friendsClient.getInvites(getToken(), true, page, PAGE_SIZE);
+      const response = await executeWithAuth((token) => friendsClient.getInvites(token, true, page, PAGE_SIZE));
       setIncomingInvites(response.invites);
       setIncomingTotalCount(response.totalCount);
       
@@ -118,7 +117,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         newPage = 1;
       } else if (page > newTotalPages) {
         newPage = newTotalPages;
-        const correctedResponse = await friendsClient.getInvites(getToken(), true, newPage, PAGE_SIZE);
+        const correctedResponse = await executeWithAuth((token) => friendsClient.getInvites(token, true, newPage, PAGE_SIZE));
         setIncomingInvites(correctedResponse.invites);
         setIncomingTotalCount(correctedResponse.totalCount);
       }
@@ -126,16 +125,15 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       setIncomingPage(newPage);
     } catch (err) {
       let apiError = err as ApiError;
-      if(handleUnauthorized(apiError)){
-        return;
+      if(apiError.statusCode !== 401) {
+        setError(apiError);
       }
-      setError(apiError);
     }
-  }, []);
+  }, [executeWithAuth]);
 
   const refreshOutgoingInvites = useCallback(async (page: number = 1) => {
     try {
-      const response = await friendsClient.getInvites(getToken(), false, page, PAGE_SIZE);
+      const response = await executeWithAuth((token) => friendsClient.getInvites(token, false, page, PAGE_SIZE));
       setOutgoingInvites(response.invites);
       setOutgoingTotalCount(response.totalCount);
       
@@ -146,7 +144,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         newPage = 1;
       } else if (page > newTotalPages) {
         newPage = newTotalPages;
-        const correctedResponse = await friendsClient.getInvites(getToken(), false, newPage, PAGE_SIZE);
+        const correctedResponse = await executeWithAuth((token) => friendsClient.getInvites(token, false, newPage, PAGE_SIZE));
         setOutgoingInvites(correctedResponse.invites);
         setOutgoingTotalCount(correctedResponse.totalCount);
       }
@@ -154,12 +152,11 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       setOutgoingPage(newPage);
     } catch (err) {
       let apiError = err as ApiError;
-      if(handleUnauthorized(apiError)){
-        return;
+      if(apiError.statusCode !== 401) {
+        setError(apiError);
       }
-      setError(apiError);
     }
-  }, []);
+  }, [executeWithAuth]);
 
   const refreshInvites = useCallback(async () => {
     await Promise.all([
@@ -172,9 +169,9 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const checkUserExistenceResponse = await usersClient.checkUserExistence(getToken(), username);
+      const checkUserExistenceResponse = await executeWithAuth((token) => usersClient.checkUserExistence(token, username));
       const userId = checkUserExistenceResponse.userId;
-      await friendsClient.sendInvite(getToken(), userId);
+      await executeWithAuth((token) => friendsClient.sendInvite(token, userId));
       await refreshOutgoingInvites(outgoingPage);
       showNotification('success', 'Заявка отправлена!');
     } catch (err) {
@@ -183,23 +180,20 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         showNotification('error', 'Пользователь не найден');
       } else if (apiError.statusCode === 400) {
         showNotification('error', apiError.errorMessage || 'Ошибка валидации');
-      } else {
+      } else if (apiError.statusCode !== 401) {
         showNotification('error', apiError.errorMessage || 'Ошибка при отправке заявки');
-      }
-      if(handleUnauthorized(apiError)){
-        return;
       }
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [refreshOutgoingInvites, showNotification, outgoingPage]);
+  }, [refreshOutgoingInvites, showNotification, outgoingPage, executeWithAuth]);
 
   const acceptInvite = useCallback(async (inviteId: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.acceptInvite(getToken(), inviteId);
+      await executeWithAuth((token) => friendsClient.acceptInvite(token, inviteId));
       await Promise.all([
         refreshFriends(friendsPage), 
         refreshIncomingInvites(incomingPage)
@@ -212,23 +206,20 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         setIncomingTotalCount(prev => Math.max(0, prev - 1));
         await refreshIncomingInvites(incomingPage);
         showNotification('info', 'Заявки больше не существует');
-      } else {
+      } else if (apiError.statusCode !== 401) {
         showNotification('error', apiError.errorMessage || 'Ошибка при принятии заявки');
-      }
-      if(handleUnauthorized(apiError)){
-        return;
       }
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [refreshFriends, refreshIncomingInvites, showNotification, friendsPage, incomingPage]);
+  }, [refreshFriends, refreshIncomingInvites, showNotification, friendsPage, incomingPage, executeWithAuth]);
 
   const declineInvite = useCallback(async (inviteId: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.declineInvite(getToken(), inviteId);
+      await executeWithAuth((token) => friendsClient.declineInvite(token, inviteId));
       await refreshIncomingInvites(incomingPage);
       showNotification('success', 'Заявка отклонена');
     } catch (err) {
@@ -238,23 +229,20 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         setIncomingTotalCount(prev => Math.max(0, prev - 1));
         await refreshIncomingInvites(incomingPage);
         showNotification('info', 'Заявки больше не существует');
-      } else {
+      } else if (apiError.statusCode !== 401) {
         showNotification('error', apiError.errorMessage || 'Ошибка при отклонении заявки');
-      }
-      if(handleUnauthorized(apiError)){
-        return;
       }
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [refreshIncomingInvites, showNotification, incomingPage]);
+  }, [refreshIncomingInvites, showNotification, incomingPage, executeWithAuth]);
 
   const declineOutgoingInvite = useCallback(async (inviteId: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.declineInvite(getToken(), inviteId);
+      await executeWithAuth((token) => friendsClient.declineInvite(token, inviteId));
       await refreshOutgoingInvites(outgoingPage);
       showNotification('success', 'Заявка отозвана');
     } catch (err) {
@@ -264,36 +252,32 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         setOutgoingTotalCount(prev => Math.max(0, prev - 1));
         await refreshOutgoingInvites(outgoingPage);
         showNotification('info', 'Заявки больше не существует');
-      } else {
+      } else if (apiError.statusCode !== 401) {
         showNotification('error', apiError.errorMessage || 'Ошибка при отзыве заявки');
-      }
-      if(handleUnauthorized(apiError)){
-        return;
       }
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [refreshOutgoingInvites, showNotification, outgoingPage]);
+  }, [refreshOutgoingInvites, showNotification, outgoingPage, executeWithAuth]);
 
   const removeFriend = useCallback(async (friendId: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await friendsClient.removeFriend(getToken(), friendId);
+      await executeWithAuth((token) => friendsClient.removeFriend(token, friendId));
       await refreshFriends(friendsPage);
       showNotification('success', 'Друг удален');
     } catch (err) {
       const apiError = err as ApiError;
-      showNotification('error', apiError.errorMessage || 'Ошибка при удалении друга');
-      if(handleUnauthorized(apiError)){
-        return;
+      if (apiError.statusCode !== 401) {
+        showNotification('error', apiError.errorMessage || 'Ошибка при удалении друга');
       }
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [refreshFriends, showNotification, friendsPage]);
+  }, [refreshFriends, showNotification, friendsPage, executeWithAuth]);
 
   return (
     <FriendsContext.Provider value={{

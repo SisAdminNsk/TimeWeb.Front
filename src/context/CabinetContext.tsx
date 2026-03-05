@@ -3,12 +3,13 @@ import type { ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { usersClient } from '../api/users/UsersClient';
 import type { ApiError } from '../api/ApiError';
-import type { 
-  GetProfileResponse, 
-  UpdateProfileRequest
+import type {
+  GetProfileResponse,
+  UpdateProfileRequest,
+  GetLoginsResponse,
 } from '../api/users/UsersContracts';
-import { PROFILE_ATTRIBUTES } from '../api/users/UsersContracts'
-import { getIdFromJwt } from '../common/JwtHelper';
+import { PROFILE_ATTRIBUTES } from '../api/users/UsersContracts';
+import { getIdFromJwt, getLoginIdFromJwt } from '../common/JwtHelper';
 
 export interface CabinetUserData {
   name: string;
@@ -25,6 +26,12 @@ interface CabinetContextType {
   updateUserData: (data: Partial<CabinetUserData>) => Promise<void>;
   refreshUserData: () => Promise<void>;
   clearError: () => void;
+  getUserSessions: (
+    pageSize?: number,
+    pageNumber?: number,
+    isLogout?: boolean
+  ) => Promise<GetLoginsResponse>;
+  currentLoginId: string | null;
 }
 
 const CabinetContext = createContext<CabinetContextType | undefined>(undefined);
@@ -40,17 +47,17 @@ const isValidEmail = (email: string | null | undefined): boolean => {
 };
 
 export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) => {
-  const { user, isAuthenticated, getToken, handleUnauthorized } = useAuth();
+  const { user, isAuthenticated, executeWithAuth } = useAuth();
   const [userData, setUserData] = useState<CabinetUserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  const [currentLoginId, setCurrentLoginId] = useState<string | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
   const mapProfileToUserData = useCallback(
     (response: GetProfileResponse, currentUser: typeof user): CabinetUserData => {
       const attributes = response.profile.attributes || {};
-      
       return {
         name: currentUser?.name || '',
         email: attributes[PROFILE_ATTRIBUTES.Email] || '',
@@ -65,37 +72,37 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
   const refreshUserData = useCallback(async () => {
     if (!isAuthenticated || !user) {
       setUserData(null);
+      setCurrentLoginId(null);
       setIsLoading(false);
       return;
     }
-
     setIsLoading(true);
     setError(null);
     try {
-      const token = getToken();
-      const userId = getIdFromJwt(token);
-      const profile = await usersClient.getProfile(token, userId);
+      const profile = await executeWithAuth((token) => {
+        const loginId = getLoginIdFromJwt(token);
+        setCurrentLoginId(loginId);
+        const userId = getIdFromJwt(token);
+        return usersClient.getProfile(token, userId);
+      });
       setUserData(mapProfileToUserData(profile, user));
     } catch (err) {
       const apiError = err as ApiError;
-      if (handleUnauthorized(apiError)) {
-        return;
+      if (apiError.statusCode !== 401) {
+        setUserData({
+          name: user.name || '',
+          email: '',
+          birthDate: '',
+          gender: '',
+          registrationDate: user.registrationDate || new Date().toISOString(),
+        });
+        setError(apiError);
+        console.error('Failed to load user profile:', apiError);
       }
-
-      setUserData({
-        name: user.name || '',
-        email: '',
-        birthDate: '',
-        gender: '',
-        registrationDate: user.registrationDate || new Date().toISOString(),
-      });
-
-      setError(apiError);
-      console.error('Failed to load user profile:', apiError);
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, user, getToken, handleUnauthorized, mapProfileToUserData]);
+  }, [isAuthenticated, user, executeWithAuth, mapProfileToUserData]);
 
   useEffect(() => {
     refreshUserData();
@@ -105,7 +112,6 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
     if (!user) {
       throw new Error('User not authenticated');
     }
-
     if (data.email !== undefined && data.email !== null) {
       if (data.email.trim() === '') {
         throw new Error('Email не может быть пустым');
@@ -114,16 +120,13 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
         throw new Error('Некорректный формат email адреса');
       }
     }
-
     setIsLoading(true);
     setError(null);
     try {
       const profileAttributes: Record<string, string> = {};
-
       if (data.email !== undefined) {
         profileAttributes[PROFILE_ATTRIBUTES.Email] = data.email?.trim() ?? '';
       }
-
       if (data.birthDate !== undefined) {
         if (data.birthDate && data.birthDate.trim() !== '') {
           const date = new Date(data.birthDate);
@@ -136,41 +139,63 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
           profileAttributes[PROFILE_ATTRIBUTES.Birthdate] = '';
         }
       }
-
       if (data.gender !== undefined) {
         profileAttributes[PROFILE_ATTRIBUTES.Gender] = data.gender ?? '';
       }
-
       const updateRequest: UpdateProfileRequest = {
         profileAttributes,
       };
-
-      const token = getToken();
-      const userId = getIdFromJwt(token);
-      await usersClient.updateProfile(token, userId, updateRequest);
-
+      await executeWithAuth((token) => {
+        const userId = getIdFromJwt(token);
+        return usersClient.updateProfile(token, userId, updateRequest);
+      });
       setUserData((prev) => {
         if (!prev) return null;
         return {
           ...prev,
           ...data,
           email: data.email !== undefined ? data.email.trim() : prev.email,
-          birthDate: data.birthDate !== undefined ? data.birthDate : prev.birthDate, 
+          birthDate: data.birthDate !== undefined ? data.birthDate : prev.birthDate,
           gender: data.gender !== undefined ? data.gender : prev.gender,
         };
       });
     } catch (err) {
       const apiError = err as ApiError;
-      if (handleUnauthorized(apiError)) {
-        return;
+      if (apiError.statusCode !== 401) {
+        setError(apiError);
+        console.error('Failed to update user profile:', apiError);
       }
-      setError(apiError);
-      console.error('Failed to update user profile:', apiError);
       throw err;
     } finally {
       setIsLoading(false);
     }
   };
+
+  const getUserSessions = useCallback(
+    async (
+      pageSize: number = 20,
+      pageNumber: number = 1,
+      isLogout: boolean = false
+    ): Promise<GetLoginsResponse> => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      try {
+        const response = await executeWithAuth((token) => {
+          return usersClient.getLogins(token, pageSize, pageNumber, isLogout);
+        });
+        return response;
+      } catch (err) {
+        const apiError = err as ApiError;
+        if (apiError.statusCode !== 401) {
+          setError(apiError);
+          console.error('Failed to load user sessions:', apiError);
+        }
+        throw err;
+      }
+    },
+    [user, executeWithAuth]
+  );
 
   return (
     <CabinetContext.Provider
@@ -181,6 +206,8 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
         updateUserData,
         refreshUserData,
         clearError,
+        getUserSessions,
+        currentLoginId,
       }}
     >
       {children}

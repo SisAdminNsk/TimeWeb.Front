@@ -11,8 +11,8 @@ export const LayoutPage = () => {
 
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout('user');
     navigate('/sign-in');
   };
 
@@ -191,6 +191,9 @@ export const LayoutPage = () => {
           <Link to="/events" style={navItemStyle('/events')}>
             Календарь встреч
           </Link>
+          <Link to="/friends" style={navItemStyle('/friends')}>
+            Друзья
+          </Link>
         </nav>
 
         <div style={userProfileStyle}>
@@ -239,3 +242,5 @@ export const LayoutPage = () => {
     </div>
   );
 };
+
+export default LayoutPage;

@@ -14,7 +14,8 @@ export interface SignInRequest {
 }
 
 export interface SignInResponse {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface CheckUserExistenceResponse{
@@ -54,6 +55,32 @@ export interface UpdateProfileRequest {
 
 export interface UpdateProfileResponse {
     profile: ProfileDto;
+}
+
+export interface RefreshTokenRequest{
+  token: string;
+}
+
+export interface RefreshTokenResponse{
+  refreshToken: string;
+  accessToken: string;
+}
+
+export interface SessionDto{
+  id: string,
+  userId: string,
+  isLogut: boolean,
+  loginAt: string,
+  logoutAt: string | null,
+  expiresAt: string,
+  logoutReason: string | null,
+  ipAddress: string,
+  userAgent: string
+}
+
+export interface GetLoginsResponse{
+  totalCount: number,
+  logins: SessionDto[]
 }
 
 export const PROFILE_ATTRIBUTES = {

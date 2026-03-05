@@ -18,3 +18,20 @@ export const getIdFromJwt = (token: string): string => {
 
     return payloadObj.UserId;
 };
+
+
+export const getLoginIdFromJwt = (token: string): string => {
+
+   const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT format');
+    }
+
+    const payload = parts[1];
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const decoded = atob(padded);
+    const payloadObj = JSON.parse(decoded);
+
+    return payloadObj.LoginId;
+};
