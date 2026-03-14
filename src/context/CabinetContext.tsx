@@ -7,6 +7,7 @@ import type {
   GetProfileResponse,
   UpdateProfileRequest,
   GetLoginsResponse,
+  ChangePasswordRequest,
 } from '../api/users/UsersContracts';
 import { PROFILE_ATTRIBUTES } from '../api/users/UsersContracts';
 import { getIdFromJwt, getLoginIdFromJwt } from '../common/JwtHelper';
@@ -31,6 +32,12 @@ interface CabinetContextType {
     pageNumber?: number,
     isLogout?: boolean
   ) => Promise<GetLoginsResponse>;
+  terminateSession: (loginId: string) => Promise<void>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string
+  ) => Promise<void>;
   currentLoginId: string | null;
 }
 
@@ -171,6 +178,75 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
     }
   };
 
+  const changePassword = useCallback(
+    async (
+      currentPassword: string,
+      newPassword: string,
+      confirmPassword: string
+    ): Promise<void> => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        throw new Error('Все поля должны быть заполнены');
+      }
+
+      if (newPassword !== confirmPassword) {
+        throw new Error('Новые пароли не совпадают');
+      }
+
+      if (newPassword.length < 8) {
+        throw new Error('Пароль должен содержать минимум 8 символов');
+      }
+
+      if (!/[A-Z]/.test(newPassword)) {
+        throw new Error('Пароль должен содержать заглавную букву');
+      }
+
+      if (!/[a-z]/.test(newPassword)) {
+        throw new Error('Пароль должен содержать строчную букву');
+      }
+
+      if (!/[0-9]/.test(newPassword)) {
+        throw new Error('Пароль должен содержать цифру');
+      }
+
+      try {
+        await executeWithAuth((token) => {
+          const request: ChangePasswordRequest = {
+            oldPassword: currentPassword,
+            newPassword,
+          };
+          return usersClient.changePassword(token, request);
+        });
+      } catch (err) {
+        const apiError = err as ApiError;
+        
+        // Обработка специфических ошибок от сервера
+        if (apiError.statusCode === 403) {
+          if (apiError.errorCode === 'BadCredentials') {
+            throw new Error('Неверный текущий пароль');
+          }
+          if (apiError.errorCode === 'CooldownPeriod') {
+            throw new Error('Смена пароля доступна не чаще чем раз в 12 часов');
+          }
+        }
+        
+        if (apiError.statusCode === 400) {
+          throw new Error(apiError.errorMessage || 'Некорректный новый пароль');
+        }
+        
+        if (apiError.statusCode !== 401) {
+          setError(apiError);
+          console.error('Failed to change password:', apiError);
+        }
+        throw err;
+      }
+    },
+    [user, executeWithAuth]
+  );
+
   const getUserSessions = useCallback(
     async (
       pageSize: number = 20,
@@ -197,6 +273,27 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
     [user, executeWithAuth]
   );
 
+  const terminateSession = useCallback(
+    async (loginId: string): Promise<void> => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      try {
+        await executeWithAuth((token) => {
+          return usersClient.logout(token, loginId);
+        });
+      } catch (err) {
+        const apiError = err as ApiError;
+        if (apiError.statusCode !== 401) {
+          setError(apiError);
+          console.error('Failed to terminate session:', apiError);
+        }
+        throw err;
+      }
+    },
+    [user, executeWithAuth]
+  );
+
   return (
     <CabinetContext.Provider
       value={{
@@ -207,6 +304,8 @@ export const CabinetProvider: React.FC<CabinetProviderProps> = ({ children }) =>
         refreshUserData,
         clearError,
         getUserSessions,
+        terminateSession,
+        changePassword,
         currentLoginId,
       }}
     >

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCabinet } from '../context/CabinetContext';
 import { theme } from '../styles/theme';
 import type { SessionDto } from '../api/users/UsersContracts';
@@ -11,10 +12,40 @@ const isValidEmail = (email: string): boolean => {
 
 type SectionType = 'profile' | 'security' | 'activity';
 
+interface TerminateModalState {
+  isOpen: boolean;
+  sessionId: string | null;
+  sessionInfo: { userAgent: string; loginAt: string } | null;
+}
+
+interface TerminateAllModalState {
+  isOpen: boolean;
+}
+
+interface ChangePasswordModalState {
+  isOpen: boolean;
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+  currentPasswordError: string;
+  newPasswordError: string;
+  confirmPasswordError: string;
+  generalError: string;
+}
+
 export const CabinetPage = () => {
-  const { userData, isLoading, updateUserData, getUserSessions, currentLoginId } = useCabinet();
+  const {
+    userData,
+    isLoading,
+    updateUserData,
+    getUserSessions,
+    currentLoginId,
+    terminateSession,
+    changePassword,
+  } = useCabinet();
+  const navigate = useNavigate();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
-  
+
   const [activeSection, setActiveSection] = useState<SectionType>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -25,19 +56,32 @@ export const CabinetPage = () => {
   const [emailError, setEmailError] = useState<string>('');
   const [isEmailTouched, setIsEmailTouched] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Session state
   const [sessions, setSessions] = useState<SessionDto[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [totalSessions, setTotalSessions] = useState(0);
   const [terminatingSessionId, setTerminatingSessionId] = useState<string | null>(null);
-  
-  // Pagination state
+  const [terminateModal, setTerminateModal] = useState<TerminateModalState>({
+    isOpen: false,
+    sessionId: null,
+    sessionInfo: null,
+  });
+  const [terminateAllModal, setTerminateAllModal] = useState<TerminateAllModalState>({
+    isOpen: false,
+  });
+  const [changePasswordModal, setChangePasswordModal] = useState<ChangePasswordModalState>({
+    isOpen: false,
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+    currentPasswordError: '',
+    newPasswordError: '',
+    confirmPasswordError: '',
+    generalError: '',
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-
-  // Mock data for security section
   const [securityData] = useState({
     passwordLastChanged: '2025-11-15',
     twoFactorEnabled: false,
@@ -68,7 +112,6 @@ export const CabinetPage = () => {
     }
   }, [formData.email, isEmailTouched]);
 
-  // Load sessions when activity section is active or page changes
   useEffect(() => {
     if (activeSection === 'activity') {
       loadSessions(currentPage);
@@ -90,15 +133,33 @@ export const CabinetPage = () => {
     }
   };
 
-  const terminateSession = async (sessionId: string) => {
-    setTerminatingSessionId(sessionId);
+  const handleTerminateClick = (session: SessionDto) => {
+    setTerminateModal({
+      isOpen: true,
+      sessionId: session.id,
+      sessionInfo: {
+        loginAt: session.loginAt,
+        userAgent: session.userAgent,
+      },
+    });
+  };
+
+  const handleTerminateCancel = () => {
+    setTerminateModal({
+      isOpen: false,
+      sessionId: null,
+      sessionInfo: null,
+    });
+  };
+
+  const handleTerminateConfirm = async () => {
+    if (!terminateModal.sessionId) return;
+    setTerminatingSessionId(terminateModal.sessionId);
     try {
-      // TODO: Реальная логика удаления сессии по ID появится в будущем
-      // await api.terminateSession(sessionId);
-      
-      // Пока просто удаляем из локального состояния для демонстрации
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
-      setTotalSessions(prev => prev - 1);
+      await terminateSession(terminateModal.sessionId);
+      setSessions(prev => prev.filter(s => s.id !== terminateModal.sessionId));
+      setTotalSessions(prev => Math.max(0, prev - 1));
+      handleTerminateCancel();
     } catch (err) {
       console.error('Failed to terminate session:', err);
       setSessionsError('Не удалось завершить сеанс');
@@ -107,14 +168,162 @@ export const CabinetPage = () => {
     }
   };
 
+  const handleTerminateAllClick = () => {
+    setTerminateAllModal({ isOpen: true });
+  };
+
+  const handleTerminateAllCancel = () => {
+    setTerminateAllModal({ isOpen: false });
+  };
+
   const terminateAllSessions = async () => {
+    setTerminateAllModal({ isOpen: false });
     try {
-      // TODO: Реальная логика завершения всех сессий
+      const sessionsToTerminate = [...sessions];
+      const currentSession = sessionsToTerminate.find(s => s.id === currentLoginId);
+      const otherSessions = sessionsToTerminate.filter(s => s.id !== currentLoginId);
+      for (const session of otherSessions) {
+        try {
+          await terminateSession(session.id);
+        } catch (err) {
+          console.error(`Failed to terminate session ${session.id}:`, err);
+        }
+      }
+      if (currentSession) {
+        try {
+          await terminateSession(currentSession.id);
+        } catch (err) {
+          console.error(`Failed to terminate current session ${currentSession.id}:`, err);
+          throw err;
+        }
+      }
       setSessions([]);
       setTotalSessions(0);
+      setSessionsError(null);
+      navigate('/sign-in', {
+        state: { message: 'Все сеансы завершены. Войдите снова.' },
+      });
     } catch (err) {
       console.error('Failed to terminate all sessions:', err);
       setSessionsError('Не удалось завершить все сеансы');
+      loadSessions(currentPage);
+    }
+  };
+
+  const handleChangePasswordClick = () => {
+    setChangePasswordModal({
+      isOpen: true,
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+      currentPasswordError: '',
+      newPasswordError: '',
+      confirmPasswordError: '',
+      generalError: '',
+    });
+  };
+
+  const handlePasswordModalCancel = () => {
+    setChangePasswordModal({
+      isOpen: false,
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+      currentPasswordError: '',
+      newPasswordError: '',
+      confirmPasswordError: '',
+      generalError: '',
+    });
+  };
+
+  const validatePassword = (password: string): string => {
+    if (!password) return '';
+    if (password.length < 8) {
+      return 'Минимум 8 символов';
+    }
+    if (!/[A-Z]/.test(password)) {
+      return 'Должна быть заглавная буква';
+    }
+    if (!/[a-z]/.test(password)) {
+      return 'Должна быть строчная буква';
+    }
+    if (!/[0-9]/.test(password)) {
+      return 'Должна быть цифра';
+    }
+    return '';
+  };
+
+  const handlePasswordChange = (
+    field: 'currentPassword' | 'newPassword' | 'confirmPassword',
+    value: string
+  ) => {
+    setChangePasswordModal(prev => {
+      const updates: Partial<ChangePasswordModalState> = { [field]: value };
+
+      if (field === 'newPassword') {
+        updates.newPasswordError = validatePassword(value);
+        if (prev.confirmPassword && value !== prev.confirmPassword) {
+          updates.confirmPasswordError = 'Пароли не совпадают';
+        } else if (prev.confirmPassword) {
+          updates.confirmPasswordError = '';
+        }
+      }
+
+      if (field === 'confirmPassword') {
+        if (value !== prev.newPassword) {
+          updates.confirmPasswordError = 'Пароли не совпадают';
+        } else {
+          updates.confirmPasswordError = '';
+        }
+      }
+
+      return { ...prev, ...updates } as ChangePasswordModalState;
+    });
+  };
+
+  const handlePasswordSubmit = async () => {
+    const { currentPassword, newPassword, confirmPassword } = changePasswordModal;
+
+    const errors: Partial<ChangePasswordModalState> = {
+      currentPasswordError: '',
+      newPasswordError: '',
+      confirmPasswordError: '',
+      generalError: '',
+    };
+
+    if (!currentPassword) {
+      errors.currentPasswordError = 'Введите текущий пароль';
+    }
+
+    if (!newPassword) {
+      errors.newPasswordError = 'Введите новый пароль';
+    } else {
+      const passwordValidation = validatePassword(newPassword);
+      if (passwordValidation) {
+        errors.newPasswordError = passwordValidation;
+      }
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPasswordError = 'Подтвердите новый пароль';
+    } else if (newPassword !== confirmPassword) {
+      errors.confirmPasswordError = 'Пароли не совпадают';
+    }
+
+    if (errors.currentPasswordError || errors.newPasswordError || errors.confirmPasswordError) {
+      setChangePasswordModal(prev => ({ ...prev, ...errors } as ChangePasswordModalState));
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword, confirmPassword);
+      handlePasswordModalCancel();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Не удалось сменить пароль';
+      setChangePasswordModal(prev => ({ ...prev, generalError: errorMessage } as ChangePasswordModalState));
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -215,33 +424,10 @@ export const CabinetPage = () => {
     return colors.primary;
   };
 
-  const getBrowserInfo = (userAgent: string) => {
-    if (!userAgent) return { browser: 'Неизвестно', os: 'Неизвестно' };
-    let browser = 'Неизвестно';
-    let os = 'Неизвестно';
-    if (userAgent.includes('Chrome')) browser = 'Chrome';
-    else if (userAgent.includes('Firefox')) browser = 'Firefox';
-    else if (userAgent.includes('Safari')) browser = 'Safari';
-    else if (userAgent.includes('Edge')) browser = 'Edge';
-    else if (userAgent.includes('Opera')) browser = 'Opera';
-
-    if (userAgent.includes('Windows')) os = 'Windows';
-    else if (userAgent.includes('Mac')) os = 'macOS';
-    else if (userAgent.includes('Linux')) os = 'Linux';
-    else if (userAgent.includes('Android')) os = 'Android';
-    else if (userAgent.includes('iOS')) os = 'iOS';
-    return { browser, os };
-  };
-
-  // ИСПРАВЛЕННАЯ ЛОГИКА: Проверка isLogout и expiresAt
   const isSessionActive = (session: SessionDto): boolean => {
-    // Сессия активна если:
-    // 1. isLogout === false (пользователь не вышел)
-    // 2. expiresAt либо отсутствует, либо ещё не наступил
     if (session.isLogut === true) {
       return false;
     }
-    
     if (session.expiresAt) {
       const expiresAt = new Date(session.expiresAt);
       const now = new Date();
@@ -249,16 +435,13 @@ export const CabinetPage = () => {
         return false;
       }
     }
-    
     return true;
   };
 
-  // Определение текущей сессии по loginId из токена
   const isCurrentSession = (session: SessionDto): boolean => {
     return currentLoginId !== null && session.id === currentLoginId;
   };
 
-  // Pagination Helpers
   const totalPages = Math.ceil(totalSessions / pageSize);
   const canGoPrev = currentPage > 1;
   const canGoNext = currentPage < totalPages;
@@ -269,11 +452,11 @@ export const CabinetPage = () => {
     }
   };
 
-  // ==================== STYLES ====================
   const containerStyle: React.CSSProperties = {
     minHeight: '100%',
     padding: 0,
   };
+
   const pageHeaderStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
@@ -282,27 +465,32 @@ export const CabinetPage = () => {
     paddingBottom: spacing.lg,
     borderBottom: `1px solid ${colors.gray200}`,
   };
+
   const pageTitleStyle: React.CSSProperties = {
     margin: 0,
     fontSize: typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
     color: colors.gray900,
   };
+
   const pageDescriptionStyle: React.CSSProperties = {
     margin: `${spacing.xs} 0 0 0`,
     fontSize: typography.fontSize.sm,
     color: colors.gray500,
   };
+
   const layoutStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: '280px 1fr',
     gap: spacing.xl,
   };
+
   const sidebarStyle: React.CSSProperties = {
     position: 'sticky' as const,
     top: spacing.xl,
     height: 'fit-content',
   };
+
   const profileCardStyle: React.CSSProperties = {
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
@@ -311,6 +499,7 @@ export const CabinetPage = () => {
     padding: spacing.xl,
     textAlign: 'center' as const,
   };
+
   const avatarStyle: React.CSSProperties = {
     width: '80px',
     height: '80px',
@@ -325,22 +514,26 @@ export const CabinetPage = () => {
     margin: '0 auto',
     marginBottom: spacing.md,
   };
+
   const profileNameStyle: React.CSSProperties = {
     margin: 0,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
     color: colors.gray900,
   };
+
   const profileEmailStyle: React.CSSProperties = {
     margin: `${spacing.xs} 0 0 0`,
     fontSize: typography.fontSize.sm,
     color: colors.gray500,
   };
+
   const profileMetaStyle: React.CSSProperties = {
     margin: `${spacing.md} 0 0 0`,
     paddingTop: spacing.md,
     borderTop: `1px solid ${colors.gray200}`,
   };
+
   const profileMetaItemStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
@@ -349,6 +542,7 @@ export const CabinetPage = () => {
     fontSize: typography.fontSize.xs,
     color: colors.gray500,
   };
+
   const navMenuStyle: React.CSSProperties = {
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
@@ -357,6 +551,7 @@ export const CabinetPage = () => {
     padding: spacing.md,
     marginTop: spacing.lg,
   };
+
   const getNavMenuItemStyle = (isActive: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
@@ -374,9 +569,11 @@ export const CabinetPage = () => {
     textAlign: 'left' as const,
     marginBottom: spacing.xs,
   });
+
   const contentAreaStyle: React.CSSProperties = {
     minWidth: 0,
   };
+
   const sectionCardStyle: React.CSSProperties = {
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
@@ -384,33 +581,40 @@ export const CabinetPage = () => {
     border: `1px solid ${colors.gray200}`,
     overflow: 'hidden',
   };
+
   const sectionHeaderStyle: React.CSSProperties = {
     padding: `${spacing.lg} ${spacing.xl}`,
     borderBottom: `1px solid ${colors.gray200}`,
     backgroundColor: colors.gray50,
   };
+
   const sectionTitleStyle: React.CSSProperties = {
     margin: 0,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
     color: colors.gray900,
   };
+
   const sectionDescriptionStyle: React.CSSProperties = {
     margin: `${spacing.xs} 0 0 0`,
     fontSize: typography.fontSize.sm,
     color: colors.gray500,
   };
+
   const sectionBodyStyle: React.CSSProperties = {
     padding: spacing.xl,
   };
+
   const infoGridStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
     gap: spacing.lg,
   };
+
   const infoItemStyle: React.CSSProperties = {
     marginBottom: 0,
   };
+
   const infoLabelStyle: React.CSSProperties = {
     display: 'block',
     fontSize: typography.fontSize.xs,
@@ -420,6 +624,7 @@ export const CabinetPage = () => {
     letterSpacing: '0.5px',
     fontWeight: typography.fontWeight.semibold,
   };
+
   const fieldValueStyle: React.CSSProperties = {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
@@ -438,21 +643,25 @@ export const CabinetPage = () => {
     backgroundColor: colors.white,
     transition: `all ${transitions.fast}`,
   };
+
   const fieldInputStyle: React.CSSProperties = {
     ...fieldValueStyle,
     cursor: 'text',
     outline: 'none',
   };
+
   const fieldErrorStyle: React.CSSProperties = {
     ...fieldInputStyle,
     borderColor: colors.error,
     backgroundColor: colors.errorLight,
   };
+
   const fieldDisabledStyle: React.CSSProperties = {
     ...fieldValueStyle,
     backgroundColor: colors.gray50,
     color: colors.gray500,
   };
+
   const selectStyle: React.CSSProperties = {
     ...fieldInputStyle,
     cursor: 'pointer',
@@ -461,11 +670,13 @@ export const CabinetPage = () => {
     backgroundRepeat: 'no-repeat',
     backgroundPosition: 'right 12px center',
   };
+
   const errorTextStyle: React.CSSProperties = {
     fontSize: typography.fontSize.xs,
     color: colors.error,
     marginTop: spacing.xs,
   };
+
   const buttonGroupStyle: React.CSSProperties = {
     display: 'flex',
     gap: spacing.sm,
@@ -473,6 +684,7 @@ export const CabinetPage = () => {
     paddingTop: spacing.lg,
     borderTop: `1px solid ${colors.gray200}`,
   };
+
   const buttonPrimaryStyle: React.CSSProperties = {
     padding: `${spacing.sm} ${spacing.lg}`,
     fontSize: typography.fontSize.sm,
@@ -487,12 +699,14 @@ export const CabinetPage = () => {
     alignItems: 'center',
     gap: spacing.xs,
   };
+
   const buttonDisabledStyle: React.CSSProperties = {
     ...buttonPrimaryStyle,
     backgroundColor: colors.gray300,
     cursor: 'not-allowed',
     opacity: 0.6,
   };
+
   const buttonSecondaryStyle: React.CSSProperties = {
     padding: `${spacing.sm} ${spacing.lg}`,
     fontSize: typography.fontSize.sm,
@@ -504,6 +718,7 @@ export const CabinetPage = () => {
     fontWeight: typography.fontWeight.medium,
     transition: `all ${transitions.normal}`,
   };
+
   const buttonDangerStyle: React.CSSProperties = {
     padding: `${spacing.sm} ${spacing.lg}`,
     fontSize: typography.fontSize.sm,
@@ -518,30 +733,49 @@ export const CabinetPage = () => {
     alignItems: 'center',
     gap: spacing.xs,
   };
+
+  const getTerminateButtonStyle = (disabled: boolean): React.CSSProperties => ({
+    padding: `${spacing.xs} ${spacing.sm}`,
+    fontSize: typography.fontSize.xs,
+    backgroundColor: disabled ? colors.gray200 : colors.error,
+    color: disabled ? colors.gray400 : colors.white,
+    border: 'none',
+    borderRadius: borderRadius.md,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontWeight: typography.fontWeight.medium,
+    transition: `all ${transitions.fast}`,
+    opacity: disabled ? 0.6 : 1,
+    outline: 'none',
+  });
+
   const statsGridStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: spacing.md,
     marginBottom: spacing.xl,
   };
+
   const statCardStyle: React.CSSProperties = {
     backgroundColor: colors.gray50,
     borderRadius: borderRadius.md,
     padding: spacing.lg,
     border: `1px solid ${colors.gray200}`,
   };
+
   const statValueStyle: React.CSSProperties = {
     fontSize: typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
     color: colors.primary,
     margin: 0,
   };
+
   const statLabelStyle: React.CSSProperties = {
     fontSize: typography.fontSize.xs,
     color: colors.gray500,
     marginTop: spacing.xs,
     margin: 0,
   };
+
   const securityItemStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
@@ -549,21 +783,25 @@ export const CabinetPage = () => {
     padding: `${spacing.md} 0`,
     borderBottom: `1px solid ${colors.gray100}`,
   };
+
   const securityItemInfoStyle: React.CSSProperties = {
     flex: 1,
   };
+
   const securityItemTitleStyle: React.CSSProperties = {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.gray900,
     margin: 0,
   };
+
   const securityItemDescriptionStyle: React.CSSProperties = {
     fontSize: typography.fontSize.xs,
     color: colors.gray500,
     marginTop: spacing.xs,
     margin: 0,
   };
+
   const statusBadgeStyle = (active: boolean): React.CSSProperties => ({
     padding: `${spacing.xs} ${spacing.sm}`,
     borderRadius: borderRadius.full,
@@ -572,31 +810,25 @@ export const CabinetPage = () => {
     backgroundColor: active ? colors.successLight : colors.gray200,
     color: active ? colors.successDark : colors.gray600,
   });
-  const currentSessionBadgeStyle: React.CSSProperties = {
-    padding: `${spacing.xs} ${spacing.sm}`,
-    borderRadius: borderRadius.full,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    backgroundColor: colors.primaryLight,
-    color: colors.primaryDark,
-    marginLeft: spacing.xs,
-  };
+
   const emptyStateStyle: React.CSSProperties = {
     textAlign: 'center',
     padding: `${spacing['2xl']} ${spacing.xl}`,
     color: colors.gray500,
     fontSize: typography.fontSize.sm,
   };
-  // Session table styles
+
   const tableStyle: React.CSSProperties = {
     width: '100%',
     borderCollapse: 'collapse' as const,
     marginTop: spacing.lg,
   };
+
   const tableHeaderStyle: React.CSSProperties = {
     backgroundColor: colors.gray50,
     borderBottom: `2px solid ${colors.gray200}`,
   };
+
   const tableHeaderCellStyle: React.CSSProperties = {
     padding: `${spacing.sm} ${spacing.md}`,
     textAlign: 'left' as const,
@@ -606,41 +838,31 @@ export const CabinetPage = () => {
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
   };
+
   const tableRowStyle: React.CSSProperties = {
     borderBottom: `1px solid ${colors.gray100}`,
     transition: `background-color ${transitions.fast}`,
   };
+
   const tableCellStyle: React.CSSProperties = {
     padding: `${spacing.md}`,
     fontSize: typography.fontSize.sm,
     color: colors.gray700,
     verticalAlign: 'middle',
   };
+
   const sessionInfoStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: spacing.xs,
   };
+
   const sessionBrowserStyle: React.CSSProperties = {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.gray900,
   };
-  const sessionMetaStyle: React.CSSProperties = {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray500,
-  };
-  const sessionIpStyle: React.CSSProperties = {
-    fontFamily: 'monospace',
-    fontSize: typography.fontSize.xs,
-    color: colors.gray600,
-    backgroundColor: colors.gray100,
-    padding: `${spacing.xs} ${spacing.sm}`,
-    borderRadius: borderRadius.sm,
-    display: 'inline-block',
-  };
-  
-  // Pagination Styles
+
   const paginationStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
@@ -649,13 +871,147 @@ export const CabinetPage = () => {
     paddingTop: spacing.lg,
     borderTop: `1px solid ${colors.gray200}`,
   };
+
   const paginationInfoStyle: React.CSSProperties = {
     fontSize: typography.fontSize.sm,
     color: colors.gray600,
   };
+
   const paginationButtonsStyle: React.CSSProperties = {
     display: 'flex',
     gap: spacing.sm,
+  };
+
+  const modalOverlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    animation: 'fadeIn 0.2s ease',
+  };
+
+  const modalContentStyle: React.CSSProperties = {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.xl,
+    boxShadow: shadows.xl,
+    padding: spacing.xl,
+    maxWidth: '420px',
+    width: '90%',
+    animation: 'slideIn 0.2s ease',
+  };
+
+  const modalHeaderStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  };
+
+  const modalIconStyle: React.CSSProperties = {
+    width: '48px',
+    height: '48px',
+    backgroundColor: colors.errorLight,
+    borderRadius: borderRadius.full,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  };
+
+  const modalIconSvgStyle: React.CSSProperties = {
+    width: '24px',
+    height: '24px',
+    color: colors.error,
+  };
+
+  const modalIconSuccessStyle: React.CSSProperties = {
+    width: '48px',
+    height: '48px',
+    backgroundColor: colors.successLight,
+    borderRadius: borderRadius.full,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  };
+
+  const modalIconSuccessSvgStyle: React.CSSProperties = {
+    width: '24px',
+    height: '24px',
+    color: colors.success,
+  };
+
+  const modalTitleStyle: React.CSSProperties = {
+    margin: 0,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.gray900,
+  };
+
+  const modalMessageStyle: React.CSSProperties = {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray600,
+    marginBottom: spacing.lg,
+    lineHeight: 1.6,
+  };
+
+  const modalSessionInfoStyle: React.CSSProperties = {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.gray900,
+    backgroundColor: colors.gray100,
+    padding: `${spacing.sm} ${spacing.md}`,
+    borderRadius: borderRadius.md,
+    display: 'inline-block',
+    marginBottom: spacing.lg,
+  };
+
+  const modalActionsStyle: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  };
+
+  const modalButtonCancelStyle: React.CSSProperties = {
+    padding: `${spacing.sm} ${spacing.lg}`,
+    backgroundColor: colors.white,
+    color: colors.gray700,
+    border: `1px solid ${colors.gray300}`,
+    borderRadius: borderRadius.md,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    cursor: 'pointer',
+    transition: `all ${transitions.normal}`,
+  };
+
+  const modalButtonDeleteStyle: React.CSSProperties = {
+    padding: `${spacing.sm} ${spacing.lg}`,
+    backgroundColor: colors.error,
+    color: colors.white,
+    border: 'none',
+    borderRadius: borderRadius.md,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    cursor: 'pointer',
+    transition: `all ${transitions.normal}`,
+  };
+
+  const modalButtonPrimaryStyle: React.CSSProperties = {
+    padding: `${spacing.sm} ${spacing.lg}`,
+    backgroundColor: colors.primary,
+    color: colors.white,
+    border: 'none',
+    borderRadius: borderRadius.md,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    cursor: 'pointer',
+    transition: `all ${transitions.normal}`,
   };
 
   return (
@@ -869,7 +1225,10 @@ export const CabinetPage = () => {
                       Последний раз изменён {formatDate(securityData.passwordLastChanged)}
                     </p>
                   </div>
-                  <button style={buttonSecondaryStyle}>
+                  <button
+                    onClick={handleChangePasswordClick}
+                    style={buttonSecondaryStyle}
+                  >
                     Изменить
                   </button>
                 </div>
@@ -886,7 +1245,7 @@ export const CabinetPage = () => {
                 </div>
                 <div style={{ marginTop: spacing.xl, paddingTop: spacing.lg, borderTop: `1px solid ${colors.gray200}` }}>
                   <button
-                    onClick={terminateAllSessions}
+                    onClick={handleTerminateAllClick}
                     style={buttonDangerStyle}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -922,7 +1281,6 @@ export const CabinetPage = () => {
                 </div>
               </div>
               <div style={sectionBodyStyle}>
-                {/* Stats */}
                 <div style={statsGridStyle}>
                   <div style={statCardStyle}>
                     <p style={statValueStyle}>{sessions.filter(s => isSessionActive(s)).length}</p>
@@ -935,7 +1293,6 @@ export const CabinetPage = () => {
                     <p style={statLabelStyle}>Последний вход</p>
                   </div>
                 </div>
-                {/* Sessions Table */}
                 <div style={{ marginTop: spacing.xl }}>
                   {sessionsLoading ? (
                     <div style={emptyStateStyle}>
@@ -979,9 +1336,9 @@ export const CabinetPage = () => {
                           </thead>
                           <tbody>
                             {sessions.map((session) => {
-                              const { browser, os } = getBrowserInfo(session.userAgent);
                               const isActive = isSessionActive(session);
                               const isCurrent = isCurrentSession(session);
+                              const isDisabled = terminatingSessionId === session.id || !isActive || isCurrent;
                               return (
                                 <tr
                                   key={session.id}
@@ -993,10 +1350,7 @@ export const CabinetPage = () => {
                                   <td style={tableCellStyle}>
                                     <div style={sessionInfoStyle}>
                                       <span style={sessionBrowserStyle}>
-                                        {browser}
-                                      </span>
-                                      <span style={sessionMetaStyle}>
-                                        {os}
+                                        {session.userAgent}
                                       </span>
                                     </div>
                                   </td>
@@ -1004,18 +1358,11 @@ export const CabinetPage = () => {
                                     {formatDateTime(session.loginAt)}
                                   </td>
                                   <td style={tableCellStyle}>
-                                    {/* Кнопка действия отображается для всех сессий */}
                                     <button
-                                      onClick={() => terminateSession(session.id)}
-                                      disabled={terminatingSessionId === session.id || !isActive}
-                                      style={{
-                                        ...buttonSecondaryStyle,
-                                        padding: `${spacing.xs} ${spacing.sm}`,
-                                        fontSize: typography.fontSize.xs,
-                                        opacity: (terminatingSessionId === session.id || !isActive) ? 0.6 : 1,
-                                        cursor: (terminatingSessionId === session.id || !isActive) ? 'not-allowed' : 'pointer',
-                                      }}
-                                      title={!isActive ? "Сеанс уже завершен" : "Завершить сеанс"}
+                                      onClick={() => handleTerminateClick(session)}
+                                      disabled={isDisabled}
+                                      style={getTerminateButtonStyle(isDisabled)}
+                                      title={!isActive ? "Сеанс уже завершен" : isCurrent ? "Нельзя завершить текущий сеанс" : "Завершить сеанс"}
                                     >
                                       {terminatingSessionId === session.id ? '...' : 'Завершить'}
                                     </button>
@@ -1026,8 +1373,6 @@ export const CabinetPage = () => {
                           </tbody>
                         </table>
                       </div>
-                      
-                      {/* Pagination Controls */}
                       {totalPages > 1 && (
                         <div style={paginationStyle}>
                           <div style={paginationInfoStyle}>
@@ -1059,6 +1404,239 @@ export const CabinetPage = () => {
           )}
         </main>
       </div>
+      {/* Termination Confirmation Modal */}
+      {terminateModal.isOpen && (
+        <div style={modalOverlayStyle} onClick={handleTerminateCancel}>
+          <div
+            style={modalContentStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={modalHeaderStyle}>
+              <div style={modalIconStyle}>
+                <svg
+                  style={modalIconSvgStyle}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <h3 style={modalTitleStyle}>Завершить сеанс?</h3>
+            </div>
+            <p style={modalMessageStyle}>
+              Вы уверены, что хотите завершить этот сеанс? Пользователь будет вынужден войти в аккаунт снова.
+            </p>
+            {terminateModal.sessionInfo && (
+              <div style={modalSessionInfoStyle}>
+                {terminateModal.sessionInfo.userAgent}
+                <br />
+                <span style={{ fontWeight: typography.fontWeight.normal, color: colors.gray500 }}>
+                  Вход: {formatDateTime(terminateModal.sessionInfo.loginAt)}
+                </span>
+              </div>
+            )}
+            <div style={modalActionsStyle}>
+              <button
+                style={modalButtonCancelStyle}
+                onClick={handleTerminateCancel}
+                disabled={terminatingSessionId !== null}
+              >
+                Отмена
+              </button>
+              <button
+                style={modalButtonDeleteStyle}
+                onClick={handleTerminateConfirm}
+                disabled={terminatingSessionId !== null}
+              >
+                {terminatingSessionId !== null ? 'Завершение...' : 'Завершить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Terminate All Sessions Confirmation Modal */}
+      {terminateAllModal.isOpen && (
+        <div style={modalOverlayStyle} onClick={handleTerminateAllCancel}>
+          <div
+            style={modalContentStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={modalHeaderStyle}>
+              <div style={modalIconStyle}>
+                <svg
+                  style={modalIconSvgStyle}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <h3 style={modalTitleStyle}>Завершить все сеансы?</h3>
+            </div>
+            <p style={modalMessageStyle}>
+              Вы уверены, что хотите завершить все активные сеансы? Вам и всем другим пользователям придётся войти в аккаунт снова.
+            </p>
+            <div style={modalSessionInfoStyle}>
+              Будет завершено сеансов: {sessions.length}
+              <br />
+              <span style={{ fontWeight: typography.fontWeight.normal, color: colors.gray500 }}>
+                Включая текущий сеанс
+              </span>
+            </div>
+            <div style={modalActionsStyle}>
+              <button
+                style={modalButtonCancelStyle}
+                onClick={handleTerminateAllCancel}
+              >
+                Отмена
+              </button>
+              <button
+                style={modalButtonDeleteStyle}
+                onClick={terminateAllSessions}
+              >
+                Завершить все
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Change Password Modal */}
+      {changePasswordModal.isOpen && (
+        <div style={modalOverlayStyle} onClick={handlePasswordModalCancel}>
+          <div
+            style={modalContentStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={modalHeaderStyle}>
+              <div style={modalIconSuccessStyle}>
+                <svg
+                  style={modalIconSuccessSvgStyle}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                  />
+                </svg>
+              </div>
+              <h3 style={modalTitleStyle}>Смена пароля</h3>
+            </div>
+            {changePasswordModal.generalError && (
+              <div style={{
+                ...errorTextStyle,
+                marginBottom: spacing.md,
+                padding: spacing.sm,
+                backgroundColor: colors.errorLight,
+                borderRadius: borderRadius.md,
+              }}>
+                {changePasswordModal.generalError}
+              </div>
+            )}
+            <div style={{ marginBottom: spacing.md }}>
+              <label style={infoLabelStyle}>Текущий пароль</label>
+              <input
+                type="password"
+                value={changePasswordModal.currentPassword}
+                onChange={(e) => handlePasswordChange('currentPassword', e.target.value)}
+                placeholder="Введите текущий пароль"
+                style={changePasswordModal.currentPasswordError ? fieldErrorStyle : fieldInputStyle}
+                disabled={isChangingPassword}
+                onFocus={(e) => {
+                  e.currentTarget.style.outline = 'none';
+                  e.currentTarget.style.borderColor = changePasswordModal.currentPasswordError ? colors.error : colors.primary;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = changePasswordModal.currentPasswordError ? colors.error : colors.gray300;
+                }}
+              />
+              {changePasswordModal.currentPasswordError && (
+                <div style={errorTextStyle}>{changePasswordModal.currentPasswordError}</div>
+              )}
+            </div>
+            <div style={{ marginBottom: spacing.md }}>
+              <label style={infoLabelStyle}>Новый пароль</label>
+              <input
+                type="password"
+                value={changePasswordModal.newPassword}
+                onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
+                placeholder="Введите новый пароль"
+                style={changePasswordModal.newPasswordError ? fieldErrorStyle : fieldInputStyle}
+                disabled={isChangingPassword}
+                onFocus={(e) => {
+                  e.currentTarget.style.outline = 'none';
+                  e.currentTarget.style.borderColor = changePasswordModal.newPasswordError ? colors.error : colors.primary;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = changePasswordModal.newPasswordError ? colors.error : colors.gray300;
+                }}
+              />
+              {changePasswordModal.newPasswordError && (
+                <div style={errorTextStyle}>{changePasswordModal.newPasswordError}</div>
+              )}
+              <div style={{
+                fontSize: typography.fontSize.xs,
+                color: colors.gray500,
+                marginTop: spacing.xs,
+              }}>
+                Минимум 8 символов, заглавная и строчная буквы, цифра
+              </div>
+            </div>
+            <div style={{ marginBottom: spacing.lg }}>
+              <label style={infoLabelStyle}>Подтверждение нового пароля</label>
+              <input
+                type="password"
+                value={changePasswordModal.confirmPassword}
+                onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
+                placeholder="Повторите новый пароль"
+                style={changePasswordModal.confirmPasswordError ? fieldErrorStyle : fieldInputStyle}
+                disabled={isChangingPassword}
+                onFocus={(e) => {
+                  e.currentTarget.style.outline = 'none';
+                  e.currentTarget.style.borderColor = changePasswordModal.confirmPasswordError ? colors.error : colors.primary;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = changePasswordModal.confirmPasswordError ? colors.error : colors.gray300;
+                }}
+              />
+              {changePasswordModal.confirmPasswordError && (
+                <div style={errorTextStyle}>{changePasswordModal.confirmPasswordError}</div>
+              )}
+            </div>
+            <div style={modalActionsStyle}>
+              <button
+                style={modalButtonCancelStyle}
+                onClick={handlePasswordModalCancel}
+                disabled={isChangingPassword}
+              >
+                Отмена
+              </button>
+              <button
+                style={modalButtonPrimaryStyle}
+                onClick={handlePasswordSubmit}
+                disabled={isChangingPassword}
+              >
+                {isChangingPassword ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
@@ -1067,6 +1645,16 @@ export const CabinetPage = () => {
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         button:focus {
           outline: none !important;
@@ -1081,4 +1669,5 @@ export const CabinetPage = () => {
     </div>
   );
 };
+
 export default CabinetPage;

@@ -12,7 +12,8 @@ import type {
   UpdateProfileResponse,
   RefreshTokenRequest,
   RefreshTokenResponse,
-  GetLoginsResponse
+  GetLoginsResponse,
+  ChangePasswordRequest
 } from './UsersContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -105,6 +106,29 @@ export const usersClient = {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       }
+    });
+    return handleResponse<void>(response);
+  },
+
+  logout: async (authToken: string, loginId: string): Promise<void> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/logout/${loginId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return handleResponse<void>(response);
+  },
+
+  changePassword: async (authToken: string, request: ChangePasswordRequest): Promise<void> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/change-password`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+        body: JSON.stringify(request)
     });
     return handleResponse<void>(response);
   },

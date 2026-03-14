@@ -83,6 +83,11 @@ export interface GetLoginsResponse{
   logins: SessionDto[]
 }
 
+export interface ChangePasswordRequest{
+  oldPassword: string,
+  newPassword: string
+}
+
 export const PROFILE_ATTRIBUTES = {
   Email: 'base/email',
   Birthdate: 'base/birthdate',
