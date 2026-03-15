@@ -11,6 +11,7 @@ export default defineConfig({
       },
     }),
   ],
+  base: '/TimeWeb.Front/',
   server: {
     https: {
       key: fs.readFileSync(path.resolve(__dirname, 'ssl/key.pem')),
@@ -19,5 +20,9 @@ export default defineConfig({
     port: 4000,
     host: true,
     strictPort: true,
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
   },
 })
