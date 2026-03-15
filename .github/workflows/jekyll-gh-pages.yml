@@ -1,5 +1,5 @@
-# Sample workflow for building and deploying a Jekyll site to GitHub Pages
-name: Deploy Jekyll with GitHub Pages dependencies preinstalled
+# Sample workflow for building and deploying a Vite React site to GitHub Pages
+name: Deploy Vite React to GitHub Pages
 
 on:
   # Runs on pushes targeting the default branch
@@ -29,23 +29,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
 
       # ──────────────────────────────────────────────────────────
       # Обновление .env файлов для production
       # ──────────────────────────────────────────────────────────
       - name: Update .env for production
         run: |
+          # Production API URL
+          PROD_API_URL="https://176.108.248.16:443"
+          
           # Обновляем .env
-          sed -i 's|VITE_USERS_API_URL=https://localhost:443/api/users|VITE_USERS_API_URL=https://176.108.248.16:443/api/users|g' .env
-          sed -i 's|VITE_FRIENDS_API_URL=https://localhost:443/api/friends|VITE_FRIENDS_API_URL=https://176.108.248.16:443/api/friends|g' .env
+          sed -i "s|VITE_USERS_API_URL=.*|VITE_USERS_API_URL=${PROD_API_URL}/api/users|g" .env
+          sed -i "s|VITE_FRIENDS_API_URL=.*|VITE_FRIENDS_API_URL=${PROD_API_URL}/api/friends|g" .env
           
           # Обновляем .env.production
-          sed -i 's|VITE_USERS_API_URL=http://users.api:5000|VITE_USERS_API_URL=https://176.108.248.16:443/api/users|g' .env.production
-          sed -i 's|VITE_FRIENDS_API_URL=http://friends.api:5001|VITE_FRIENDS_API_URL=https://176.108.248.16:443/api/friends|g' .env.production
+          sed -i "s|VITE_USERS_API_URL=.*|VITE_USERS_API_URL=${PROD_API_URL}/api/users|g" .env.production
+          sed -i "s|VITE_FRIENDS_API_URL=.*|VITE_FRIENDS_API_URL=${PROD_API_URL}/api/friends|g" .env.production
           
-          # .env.development оставляем без изменений (localhost)
           echo "✅ .env files updated for production"
 
       - name: Verify .env files
@@ -59,14 +67,15 @@ jobs:
           echo "=== .env.development ==="
           cat .env.development
 
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./
-          destination: ./_site
+      - name: Build with Vite
+        run: npm run build
+        env:
+          NODE_ENV: production
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
 
   # Deployment job
   deploy:
