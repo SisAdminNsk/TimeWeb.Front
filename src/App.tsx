@@ -79,8 +79,10 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const App = () => {
+  const basename = "Timeweb.Front"
+  
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <AuthProvider>
         <Routes>
           <Route 
