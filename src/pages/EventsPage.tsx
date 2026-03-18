@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EventsProvider, useEvents } from '../context/EventsContext';
 import { FriendsProvider } from '../context/FriendsContext';
 import { CalendarWidget } from '../components/CalendarWidget';
@@ -10,25 +10,39 @@ const EventsPageContent = () => {
   const { selectedDate, selectDate, notification, clearNotification } = useEvents();
   const { colors, typography, spacing, borderRadius } = theme;
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const containerStyle: React.CSSProperties = {
     animation: 'fadeIn 0.4s ease-out',
+    padding: isMobile ? spacing.md : 0,
   };
 
   const headerStyle: React.CSSProperties = {
-    marginBottom: spacing.xl,
-    paddingBottom: spacing.lg,
+    marginBottom: isMobile ? spacing.lg : spacing.xl,
+    paddingBottom: isMobile ? spacing.md : spacing.lg,
     borderBottom: `1px solid ${colors.gray200}`,
   };
 
   const titleStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: typography.fontSize['2xl'],
+    fontSize: isMobile ? typography.fontSize.xl : typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
     color: colors.gray900,
     display: 'flex',
     alignItems: 'center',
     gap: spacing.sm,
+    flexWrap: 'wrap',
   };
 
   const subtitleStyle: React.CSSProperties = {
@@ -39,8 +53,8 @@ const EventsPageContent = () => {
 
   const gridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '400px 1fr',
-    gap: spacing.lg,
+    gridTemplateColumns: isMobile ? '1fr' : '400px 1fr',
+    gap: isMobile ? spacing.md : spacing.lg,
     alignItems: 'start',
   };
 
@@ -62,13 +76,14 @@ const EventsPageContent = () => {
     border: `1px solid ${type === 'success' ? colors.success 
       : type === 'error' ? colors.error 
       : colors.info}`,
+    flexWrap: isMobile ? 'wrap' : 'nowrap',
   });
 
   return (
     <div style={containerStyle}>
       <header style={headerStyle}>
         <h1 style={titleStyle}>
-          <span></span>
+          <span>Календарь встреч</span>
         </h1>
         <p style={subtitleStyle}>
           Планируйте встречи и приглашайте друзей
@@ -77,8 +92,7 @@ const EventsPageContent = () => {
 
       {notification && (
         <div style={notificationStyle(notification.type)}>
-          
-          <span>
+          <span style={{ flex: isMobile ? '1 1 100%' : 'auto' }}>
             {notification.type === 'success' && '✓ '}
             {notification.type === 'error' && '⚠️ '}
             {notification.type === 'info' && 'ℹ️ '}
@@ -90,11 +104,17 @@ const EventsPageContent = () => {
               background: 'none', 
               border: 'none', 
               cursor: 'pointer', 
-              fontSize: '16px', 
-              padding: '0 4px', 
+              fontSize: '18px', 
+              padding: isMobile ? '8px' : '0 4px', 
               color: 'inherit',
-              outline: 'none'
+              outline: 'none',
+              minWidth: '32px',
+              minHeight: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
+            aria-label="Закрыть уведомление"
           >
             ✕
           </button>

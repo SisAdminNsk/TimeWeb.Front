@@ -10,6 +10,20 @@ export const LayoutPage = () => {
   const { colors, typography, spacing, borderRadius, transitions, shadows } = theme;
 
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleLogout = async () => {
     await logout('user');
@@ -54,25 +68,79 @@ export const LayoutPage = () => {
     };
   }, []);
 
+  const handleNavClick = () => {
+    if (isMobile) {
+      setIsMobileMenuOpen(false);
+    }
+  };
+
   const containerStyle: React.CSSProperties = {
     display: 'flex',
     minHeight: '100vh',
     backgroundColor: colors.gray100,
+    position: 'relative',
+    overflow: 'hidden',
   };
 
   const sidebarStyle: React.CSSProperties = {
-    width: '280px',
+    width: isMobile ? '100%' : '280px',
+    maxWidth: isMobile ? '280px' : '280px',
     backgroundColor: colors.sidebar.bg,
     color: colors.sidebar.text,
     display: 'flex',
     flexDirection: 'column',
     padding: spacing.lg,
-    position: 'fixed' as const,
+    position: isMobile ? 'fixed' : 'fixed',
     height: '100vh',
-    left: 0,
-    top: 0,
+    left: isMobile ? (isMobileMenuOpen ? '0' : '-100%') : '0',
+    top: '0',
     boxShadow: shadows.lg,
+    zIndex: 1001,
+    transition: `left ${transitions.normal}`,
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     zIndex: 1000,
+    display: isMobile && isMobileMenuOpen ? 'block' : 'none',
+    transition: `opacity ${transitions.normal}`,
+  };
+
+  const headerStyle: React.CSSProperties = {
+    display: isMobile ? 'flex' : 'none',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    backgroundColor: colors.sidebar.bg,
+    boxShadow: shadows.md,
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    zIndex: 999,
+  };
+
+  const menuButtonStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: spacing.sm,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  };
+
+  const menuBarStyle: React.CSSProperties = {
+    width: '24px',
+    height: '2px',
+    backgroundColor: colors.sidebar.text,
+    borderRadius: '2px',
+    transition: `all ${transitions.normal}`,
   };
 
   const logoStyle: React.CSSProperties = {
@@ -92,6 +160,7 @@ export const LayoutPage = () => {
 
   const navStyle: React.CSSProperties = {
     flex: 1,
+    ...(isMobile ? { marginTop: spacing.md } : {}),
   };
 
   const navItemStyle = (path: string): React.CSSProperties => ({
@@ -134,6 +203,7 @@ export const LayoutPage = () => {
     color: colors.white,
     fontWeight: typography.fontWeight.semibold,
     fontSize: typography.fontSize.sm,
+    flexShrink: 0,
   };
 
   const userNameStyle: React.CSSProperties = {
@@ -169,29 +239,58 @@ export const LayoutPage = () => {
   };
 
   const mainStyle: React.CSSProperties = {
-    marginLeft: '280px',
-    width: 'calc(100% - 280px)',
-    padding: spacing.xl,
+    marginLeft: isMobile ? '0' : '280px',
+    width: isMobile ? '100%' : 'calc(100% - 280px)',
+    padding: isMobile ? spacing.md : spacing.xl,
+    paddingTop: isMobile ? '70px' : spacing.xl,
     minHeight: '100vh',
+    boxSizing: 'border-box',
   };
 
   return (
     <div style={containerStyle}>
+      {isMobile && (
+        <div 
+          style={overlayStyle} 
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {isMobile && (
+        <header style={headerStyle}>
+          <button 
+            style={menuButtonStyle}
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Меню"
+          >
+            <span style={menuBarStyle} />
+            <span style={menuBarStyle} />
+            <span style={menuBarStyle} />
+          </button>
+          <h2 style={{ ...logoTextStyle, margin: 0, fontSize: typography.fontSize.lg }}>
+            TimeWeb
+          </h2>
+          <div style={{ width: '40px' }} /> {/* Пустой блок для центровки */}
+        </header>
+      )}
+
       <aside style={sidebarStyle}>
-        <div style={logoStyle}>
-          <div>
-            <h2 style={logoTextStyle}>TimeWeb</h2>
+        {!isMobile && (
+          <div style={logoStyle}>
+            <div>
+              <h2 style={logoTextStyle}>TimeWeb</h2>
+            </div>
           </div>
-        </div>
+        )}
 
         <nav style={navStyle}>
-          <Link to="/cabinet" style={navItemStyle('/cabinet')}>
+          <Link to="/cabinet" style={navItemStyle('/cabinet')} onClick={handleNavClick}>
             Личный кабинет
           </Link>
-          <Link to="/events" style={navItemStyle('/events')}>
+          <Link to="/events" style={navItemStyle('/events')} onClick={handleNavClick}>
             Календарь встреч
           </Link>
-          <Link to="/friends" style={navItemStyle('/friends')}>
+          <Link to="/friends" style={navItemStyle('/friends')} onClick={handleNavClick}>
             Друзья
           </Link>
         </nav>
@@ -201,8 +300,10 @@ export const LayoutPage = () => {
             <div style={avatarStyle}>
               {user?.name?.charAt(0).toUpperCase() || 'U'}
             </div>
-            <div>
-              <div style={userNameStyle}>{user?.name}</div>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ ...userNameStyle, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user?.name}
+              </div>
               <div style={userStatusStyle}>
                 <span
                   style={{

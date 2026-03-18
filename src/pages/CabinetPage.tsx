@@ -88,6 +88,24 @@ export const CabinetPage = () => {
     loginNotifications: true,
   });
 
+  // 🔹 Адаптивность: определение мобильного устройства
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setIsSidebarOpen(true);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     if (userData) {
       setFormData({
@@ -115,6 +133,10 @@ export const CabinetPage = () => {
   useEffect(() => {
     if (activeSection === 'activity') {
       loadSessions(currentPage);
+    }
+    // 🔹 На мобильном закрываем меню после выбора раздела
+    if (isMobile) {
+      setIsSidebarOpen(false);
     }
   }, [activeSection, currentPage]);
 
@@ -259,7 +281,6 @@ export const CabinetPage = () => {
   ) => {
     setChangePasswordModal(prev => {
       const updates: Partial<ChangePasswordModalState> = { [field]: value };
-
       if (field === 'newPassword') {
         updates.newPasswordError = validatePassword(value);
         if (prev.confirmPassword && value !== prev.confirmPassword) {
@@ -268,7 +289,6 @@ export const CabinetPage = () => {
           updates.confirmPasswordError = '';
         }
       }
-
       if (field === 'confirmPassword') {
         if (value !== prev.newPassword) {
           updates.confirmPasswordError = 'Пароли не совпадают';
@@ -276,25 +296,21 @@ export const CabinetPage = () => {
           updates.confirmPasswordError = '';
         }
       }
-
       return { ...prev, ...updates } as ChangePasswordModalState;
     });
   };
 
   const handlePasswordSubmit = async () => {
     const { currentPassword, newPassword, confirmPassword } = changePasswordModal;
-
     const errors: Partial<ChangePasswordModalState> = {
       currentPasswordError: '',
       newPasswordError: '',
       confirmPasswordError: '',
       generalError: '',
     };
-
     if (!currentPassword) {
       errors.currentPasswordError = 'Введите текущий пароль';
     }
-
     if (!newPassword) {
       errors.newPasswordError = 'Введите новый пароль';
     } else {
@@ -303,18 +319,15 @@ export const CabinetPage = () => {
         errors.newPasswordError = passwordValidation;
       }
     }
-
     if (!confirmPassword) {
       errors.confirmPasswordError = 'Подтвердите новый пароль';
     } else if (newPassword !== confirmPassword) {
       errors.confirmPasswordError = 'Пароли не совпадают';
     }
-
     if (errors.currentPasswordError || errors.newPasswordError || errors.confirmPasswordError) {
       setChangePasswordModal(prev => ({ ...prev, ...errors } as ChangePasswordModalState));
       return;
     }
-
     setIsChangingPassword(true);
     try {
       await changePassword(currentPassword, newPassword, confirmPassword);
@@ -452,23 +465,26 @@ export const CabinetPage = () => {
     }
   };
 
+  // 🔹 Стили с адаптивностью
   const containerStyle: React.CSSProperties = {
     minHeight: '100%',
-    padding: 0,
+    padding: isMobile ? spacing.md : 0,
   };
 
   const pageHeaderStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xl,
-    paddingBottom: spacing.lg,
+    marginBottom: isMobile ? spacing.lg : spacing.xl,
+    paddingBottom: isMobile ? spacing.md : spacing.lg,
     borderBottom: `1px solid ${colors.gray200}`,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   };
 
   const pageTitleStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: typography.fontSize['2xl'],
+    fontSize: isMobile ? typography.fontSize.xl : typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
     color: colors.gray900,
   };
@@ -481,14 +497,60 @@ export const CabinetPage = () => {
 
   const layoutStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '280px 1fr',
-    gap: spacing.xl,
+    gridTemplateColumns: isMobile ? '1fr' : '280px 1fr',
+    gap: isMobile ? spacing.lg : spacing.xl,
   };
 
   const sidebarStyle: React.CSSProperties = {
-    position: 'sticky' as const,
-    top: spacing.xl,
-    height: 'fit-content',
+    position: isMobile ? 'fixed' : 'sticky',
+    top: isMobile ? '0' : spacing.xl,
+    height: isMobile ? '100vh' : 'fit-content',
+    width: isMobile ? '280px' : '100%',
+    backgroundColor: isMobile ? colors.white : 'transparent',
+    zIndex: 1000,
+    left: isMobile ? (isSidebarOpen ? '0' : '-280px') : '0',
+    transition: `left ${transitions.normal}`,
+    overflowY: 'auto',
+    padding: isMobile ? spacing.lg : 0,
+    boxShadow: isMobile ? shadows.lg : 'none',
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 999,
+    display: isMobile && isSidebarOpen ? 'block' : 'none',
+  };
+
+  const mobileHeaderStyle: React.CSSProperties = {
+    display: isMobile ? 'flex' : 'none',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    backgroundColor: colors.white,
+    borderBottom: `1px solid ${colors.gray200}`,
+    marginBottom: spacing.md,
+  };
+
+  const menuButtonStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: spacing.sm,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  };
+
+  const menuBarStyle: React.CSSProperties = {
+    width: '24px',
+    height: '2px',
+    backgroundColor: colors.gray700,
+    borderRadius: '2px',
   };
 
   const profileCardStyle: React.CSSProperties = {
@@ -496,13 +558,13 @@ export const CabinetPage = () => {
     borderRadius: borderRadius.lg,
     boxShadow: shadows.sm,
     border: `1px solid ${colors.gray200}`,
-    padding: spacing.xl,
+    padding: isMobile ? spacing.lg : spacing.xl,
     textAlign: 'center' as const,
   };
 
   const avatarStyle: React.CSSProperties = {
-    width: '80px',
-    height: '80px',
+    width: isMobile ? '64px' : '80px',
+    height: isMobile ? '64px' : '80px',
     borderRadius: borderRadius.full,
     backgroundColor: getAvatarColor(),
     display: 'flex',
@@ -510,22 +572,24 @@ export const CabinetPage = () => {
     justifyContent: 'center',
     color: colors.white,
     fontWeight: typography.fontWeight.bold,
-    fontSize: typography.fontSize.xl,
+    fontSize: isMobile ? typography.fontSize.lg : typography.fontSize.xl,
     margin: '0 auto',
     marginBottom: spacing.md,
   };
 
   const profileNameStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: typography.fontSize.lg,
+    fontSize: isMobile ? typography.fontSize.base : typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
     color: colors.gray900,
+    wordBreak: 'break-word' as const,
   };
 
   const profileEmailStyle: React.CSSProperties = {
     margin: `${spacing.xs} 0 0 0`,
     fontSize: typography.fontSize.sm,
     color: colors.gray500,
+    wordBreak: 'break-word' as const,
   };
 
   const profileMetaStyle: React.CSSProperties = {
@@ -541,6 +605,8 @@ export const CabinetPage = () => {
     padding: `${spacing.sm} 0`,
     fontSize: typography.fontSize.xs,
     color: colors.gray500,
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   };
 
   const navMenuStyle: React.CSSProperties = {
@@ -572,6 +638,7 @@ export const CabinetPage = () => {
 
   const contentAreaStyle: React.CSSProperties = {
     minWidth: 0,
+    width: '100%',
   };
 
   const sectionCardStyle: React.CSSProperties = {
@@ -583,14 +650,14 @@ export const CabinetPage = () => {
   };
 
   const sectionHeaderStyle: React.CSSProperties = {
-    padding: `${spacing.lg} ${spacing.xl}`,
+    padding: isMobile ? spacing.md : `${spacing.lg} ${spacing.xl}`,
     borderBottom: `1px solid ${colors.gray200}`,
     backgroundColor: colors.gray50,
   };
 
   const sectionTitleStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: typography.fontSize.lg,
+    fontSize: isMobile ? typography.fontSize.base : typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
     color: colors.gray900,
   };
@@ -602,13 +669,13 @@ export const CabinetPage = () => {
   };
 
   const sectionBodyStyle: React.CSSProperties = {
-    padding: spacing.xl,
+    padding: isMobile ? spacing.md : spacing.xl,
   };
 
   const infoGridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-    gap: spacing.lg,
+    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: isMobile ? spacing.md : spacing.lg,
   };
 
   const infoItemStyle: React.CSSProperties = {
@@ -683,6 +750,7 @@ export const CabinetPage = () => {
     marginTop: spacing.xl,
     paddingTop: spacing.lg,
     borderTop: `1px solid ${colors.gray200}`,
+    flexWrap: 'wrap',
   };
 
   const buttonPrimaryStyle: React.CSSProperties = {
@@ -698,6 +766,8 @@ export const CabinetPage = () => {
     display: 'flex',
     alignItems: 'center',
     gap: spacing.xs,
+    flex: isMobile ? '1' : 'auto',
+    justifyContent: 'center',
   };
 
   const buttonDisabledStyle: React.CSSProperties = {
@@ -717,6 +787,11 @@ export const CabinetPage = () => {
     cursor: 'pointer',
     fontWeight: typography.fontWeight.medium,
     transition: `all ${transitions.normal}`,
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flex: isMobile ? '1' : 'auto',
+    justifyContent: 'center',
   };
 
   const buttonDangerStyle: React.CSSProperties = {
@@ -732,6 +807,8 @@ export const CabinetPage = () => {
     display: 'flex',
     alignItems: 'center',
     gap: spacing.xs,
+    width: isMobile ? '100%' : 'auto',
+    justifyContent: 'center',
   };
 
   const getTerminateButtonStyle = (disabled: boolean): React.CSSProperties => ({
@@ -746,27 +823,29 @@ export const CabinetPage = () => {
     transition: `all ${transitions.fast}`,
     opacity: disabled ? 0.6 : 1,
     outline: 'none',
+    whiteSpace: 'nowrap' as const,
   });
 
   const statsGridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: spacing.md,
+    gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: isMobile ? spacing.sm : spacing.md,
     marginBottom: spacing.xl,
   };
 
   const statCardStyle: React.CSSProperties = {
     backgroundColor: colors.gray50,
     borderRadius: borderRadius.md,
-    padding: spacing.lg,
+    padding: isMobile ? spacing.md : spacing.lg,
     border: `1px solid ${colors.gray200}`,
   };
 
   const statValueStyle: React.CSSProperties = {
-    fontSize: typography.fontSize['2xl'],
+    fontSize: isMobile ? typography.fontSize.xl : typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
     color: colors.primary,
     margin: 0,
+    wordBreak: 'break-word' as const,
   };
 
   const statLabelStyle: React.CSSProperties = {
@@ -782,10 +861,13 @@ export const CabinetPage = () => {
     alignItems: 'center',
     padding: `${spacing.md} 0`,
     borderBottom: `1px solid ${colors.gray100}`,
+    flexWrap: isMobile ? 'wrap' : 'nowrap',
+    gap: spacing.sm,
   };
 
   const securityItemInfoStyle: React.CSSProperties = {
     flex: 1,
+    minWidth: 0,
   };
 
   const securityItemTitleStyle: React.CSSProperties = {
@@ -809,6 +891,7 @@ export const CabinetPage = () => {
     fontWeight: typography.fontWeight.semibold,
     backgroundColor: active ? colors.successLight : colors.gray200,
     color: active ? colors.successDark : colors.gray600,
+    whiteSpace: 'nowrap' as const,
   });
 
   const emptyStateStyle: React.CSSProperties = {
@@ -822,6 +905,12 @@ export const CabinetPage = () => {
     width: '100%',
     borderCollapse: 'collapse' as const,
     marginTop: spacing.lg,
+    minWidth: '500px',
+  };
+
+  const tableWrapperStyle: React.CSSProperties = {
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
   };
 
   const tableHeaderStyle: React.CSSProperties = {
@@ -837,6 +926,7 @@ export const CabinetPage = () => {
     color: colors.gray600,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
+    whiteSpace: 'nowrap' as const,
   };
 
   const tableRowStyle: React.CSSProperties = {
@@ -861,6 +951,7 @@ export const CabinetPage = () => {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     color: colors.gray900,
+    wordBreak: 'break-word' as const,
   };
 
   const paginationStyle: React.CSSProperties = {
@@ -870,6 +961,8 @@ export const CabinetPage = () => {
     marginTop: spacing.lg,
     paddingTop: spacing.lg,
     borderTop: `1px solid ${colors.gray200}`,
+    flexWrap: isMobile ? 'wrap' : 'nowrap',
+    gap: spacing.sm,
   };
 
   const paginationInfoStyle: React.CSSProperties = {
@@ -892,18 +985,21 @@ export const CabinetPage = () => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
+    zIndex: 2000,
     animation: 'fadeIn 0.2s ease',
+    padding: isMobile ? spacing.md : 0,
   };
 
   const modalContentStyle: React.CSSProperties = {
     backgroundColor: colors.white,
     borderRadius: borderRadius.xl,
     boxShadow: shadows.xl,
-    padding: spacing.xl,
-    maxWidth: '420px',
-    width: '90%',
+    padding: isMobile ? spacing.lg : spacing.xl,
+    maxWidth: isMobile ? '100%' : '420px',
+    width: isMobile ? '100%' : '90%',
     animation: 'slideIn 0.2s ease',
+    maxHeight: '90vh',
+    overflowY: 'auto',
   };
 
   const modalHeaderStyle: React.CSSProperties = {
@@ -949,7 +1045,7 @@ export const CabinetPage = () => {
 
   const modalTitleStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: typography.fontSize.lg,
+    fontSize: isMobile ? typography.fontSize.base : typography.fontSize.lg,
     fontWeight: typography.fontWeight.semibold,
     color: colors.gray900,
   };
@@ -970,12 +1066,15 @@ export const CabinetPage = () => {
     borderRadius: borderRadius.md,
     display: 'inline-block',
     marginBottom: spacing.lg,
+    maxWidth: '100%',
+    wordBreak: 'break-word' as const,
   };
 
   const modalActionsStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'flex-end',
     gap: spacing.sm,
+    flexWrap: isMobile ? 'wrap' : 'nowrap',
   };
 
   const modalButtonCancelStyle: React.CSSProperties = {
@@ -988,6 +1087,8 @@ export const CabinetPage = () => {
     fontWeight: typography.fontWeight.medium,
     cursor: 'pointer',
     transition: `all ${transitions.normal}`,
+    flex: isMobile ? '1' : 'auto',
+    justifyContent: 'center',
   };
 
   const modalButtonDeleteStyle: React.CSSProperties = {
@@ -1000,6 +1101,8 @@ export const CabinetPage = () => {
     fontWeight: typography.fontWeight.medium,
     cursor: 'pointer',
     transition: `all ${transitions.normal}`,
+    flex: isMobile ? '1' : 'auto',
+    justifyContent: 'center',
   };
 
   const modalButtonPrimaryStyle: React.CSSProperties = {
@@ -1012,10 +1115,36 @@ export const CabinetPage = () => {
     fontWeight: typography.fontWeight.medium,
     cursor: 'pointer',
     transition: `all ${transitions.normal}`,
+    flex: isMobile ? '1' : 'auto',
+    justifyContent: 'center',
   };
 
   return (
     <div style={containerStyle}>
+      {/* 🔹 Оверлей для мобильного меню */}
+      {isMobile && isSidebarOpen && (
+        <div style={overlayStyle} onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* 🔹 Мобильный хедер с кнопкой меню */}
+      {isMobile && (
+        <header style={mobileHeaderStyle}>
+          <button
+            style={menuButtonStyle}
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Меню"
+          >
+            <span style={menuBarStyle} />
+            <span style={menuBarStyle} />
+            <span style={menuBarStyle} />
+          </button>
+          <h1 style={{ ...pageTitleStyle, margin: 0, fontSize: typography.fontSize.lg }}>
+            Личный кабинет
+          </h1>
+          <div style={{ width: '40px' }} />
+        </header>
+      )}
+
       <div style={pageHeaderStyle}>
         <div>
           <h1 style={pageTitleStyle}>Личный кабинет</h1>
@@ -1024,6 +1153,7 @@ export const CabinetPage = () => {
           </p>
         </div>
       </div>
+
       <div style={layoutStyle}>
         {/* Sidebar */}
         <aside style={sidebarStyle}>
@@ -1044,6 +1174,7 @@ export const CabinetPage = () => {
               </div>
             </div>
           </div>
+
           <nav style={navMenuStyle}>
             <button
               style={getNavMenuItemStyle(activeSection === 'profile')}
@@ -1077,6 +1208,7 @@ export const CabinetPage = () => {
             </button>
           </nav>
         </aside>
+
         {/* Main Content */}
         <main style={contentAreaStyle}>
           {isLoading ? (
@@ -1259,7 +1391,7 @@ export const CabinetPage = () => {
           ) : (
             <div style={sectionCardStyle}>
               <div style={sectionHeaderStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
                   <div>
                     <h2 style={sectionTitleStyle}>Активность</h2>
                     <p style={sectionDescriptionStyle}>
@@ -1287,7 +1419,7 @@ export const CabinetPage = () => {
                     <p style={statLabelStyle}>Активных сеансов</p>
                   </div>
                   <div style={statCardStyle}>
-                    <p style={{ ...statValueStyle, fontSize: typography.fontSize.lg }}>
+                    <p style={{ ...statValueStyle, fontSize: isMobile ? typography.fontSize.base : typography.fontSize.lg }}>
                       {sessions.length > 0 ? formatDateTime(sessions[0].loginAt) : '—'}
                     </p>
                     <p style={statLabelStyle}>Последний вход</p>
@@ -1325,7 +1457,7 @@ export const CabinetPage = () => {
                     </div>
                   ) : (
                     <>
-                      <div style={{ overflowX: 'auto' }}>
+                      <div style={tableWrapperStyle}>
                         <table style={tableStyle}>
                           <thead>
                             <tr style={tableHeaderStyle}>
@@ -1404,6 +1536,7 @@ export const CabinetPage = () => {
           )}
         </main>
       </div>
+
       {/* Termination Confirmation Modal */}
       {terminateModal.isOpen && (
         <div style={modalOverlayStyle} onClick={handleTerminateCancel}>
@@ -1460,6 +1593,7 @@ export const CabinetPage = () => {
           </div>
         </div>
       )}
+
       {/* Terminate All Sessions Confirmation Modal */}
       {terminateAllModal.isOpen && (
         <div style={modalOverlayStyle} onClick={handleTerminateAllCancel}>
@@ -1512,6 +1646,7 @@ export const CabinetPage = () => {
           </div>
         </div>
       )}
+
       {/* Change Password Modal */}
       {changePasswordModal.isOpen && (
         <div style={modalOverlayStyle} onClick={handlePasswordModalCancel}>
@@ -1637,6 +1772,7 @@ export const CabinetPage = () => {
           </div>
         </div>
       )}
+
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
@@ -1664,6 +1800,13 @@ export const CabinetPage = () => {
         }
         table tbody tr:hover {
           background-color: ${colors.gray50};
+        }
+        
+        /* 🔹 Адаптивные стили для скролла таблицы */
+        @media (max-width: 767px) {
+          input, select, textarea {
+            font-size: 16px !important;
+          }
         }
       `}</style>
     </div>
