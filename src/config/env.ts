@@ -1,6 +1,7 @@
 export interface AppConfig {
   usersApiUrl: string;
   friendsApiUrl: string;
+  eventsApiUrl: string;
   appName: string;
   isDevelopment: boolean;
   isProduction: boolean;
@@ -9,6 +10,7 @@ export interface AppConfig {
 export const config: AppConfig = {
   usersApiUrl: import.meta.env.VITE_USERS_API_URL,
   friendsApiUrl: import.meta.env.VITE_FRIENDS_API_URL,
+  eventsApiUrl: import.meta.env.VITE_EVENTS_API_URL,
   appName: import.meta.env.VITE_APP_NAME,
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,

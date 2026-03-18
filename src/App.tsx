@@ -3,12 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CabinetProvider } from './context/CabinetContext';
 import { FriendsProvider } from './context/FriendsContext';
+import { NotificationsProvider } from './context/NotificationsContext';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { LayoutPage } from './pages/LayoutPage';
 import { CabinetPage } from './pages/CabinetPage';
 import { EventsPage } from './pages/EventsPage';
 import { FriendsPage } from './pages/FriendsPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -104,7 +106,9 @@ export const App = () => {
             path="/" 
             element={
               <ProtectedRoute>
-                <LayoutPage />
+                <NotificationsProvider>
+                  <LayoutPage />
+                </NotificationsProvider>
               </ProtectedRoute>
             }
           >
@@ -131,6 +135,10 @@ export const App = () => {
                   <FriendsPage />
                 </FriendsProvider>
               } 
+            />
+            <Route 
+              path="notifications" 
+              element={<NotificationsPage />} 
             />
           </Route>
           

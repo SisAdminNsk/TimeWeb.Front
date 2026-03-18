@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationsContext';
 import { theme } from '../styles/theme';
 
 export const LayoutPage = () => {
   const { user, logout } = useAuth();
+  const { totalCount } = useNotifications(); 
   const navigate = useNavigate();
   const location = useLocation();
   const { colors, typography, spacing, borderRadius, transitions, shadows } = theme;
@@ -178,6 +180,22 @@ export const LayoutPage = () => {
     fontSize: typography.fontSize.sm,
   });
 
+  const notificationBadgeStyle: React.CSSProperties = {
+    minWidth: '20px',
+    height: '20px',
+    padding: `0 ${spacing.xs}`,
+    backgroundColor: totalCount > 0 ? colors.error : colors.gray400,
+    color: colors.white,
+    borderRadius: borderRadius.full,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+    transition: `all ${transitions.fast}`,
+  };
+
   const userProfileStyle: React.CSSProperties = {
     borderTop: `1px solid ${colors.sidebar.border}`,
     paddingTop: spacing.lg,
@@ -270,7 +288,7 @@ export const LayoutPage = () => {
           <h2 style={{ ...logoTextStyle, margin: 0, fontSize: typography.fontSize.lg }}>
             TimeWeb
           </h2>
-          <div style={{ width: '40px' }} /> {/* Пустой блок для центровки */}
+          <div style={{ width: '40px' }} />
         </header>
       )}
 
@@ -292,6 +310,12 @@ export const LayoutPage = () => {
           </Link>
           <Link to="/friends" style={navItemStyle('/friends')} onClick={handleNavClick}>
             Друзья
+          </Link>
+          <Link to="/notifications" style={navItemStyle('/notifications')} onClick={handleNavClick}>
+            <span>Уведомления</span>
+            <span style={notificationBadgeStyle}>
+              {totalCount > 99 ? '99+' : totalCount}
+            </span>
           </Link>
         </nav>
 

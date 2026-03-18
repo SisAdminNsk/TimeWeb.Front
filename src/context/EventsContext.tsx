@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import { eventsClient } from '../api/events/EventsClient';
 import type { ReactNode } from 'react';
 
 export interface CalendarEvent {
@@ -35,6 +37,7 @@ interface EventsContextType {
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
 
 export const EventsProvider = ({ children }: { children: ReactNode }) => {
+  const { executeWithAuth } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,15 +68,21 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const addEvent = useCallback(async (eventData: Omit<CalendarEvent, 'id' | 'createdAt'>) => {
     setIsLoading(true);
     try {
-      // Имитация API вызова
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
+      const createEventReq = {
+        title: eventData.title,
+        description: eventData.description,
+        startAt: `${eventData.date}T${eventData.startTime}`,
+        endAt: `${eventData.date}T${eventData.endTime}`,
+        memberIds: eventData.friendIds,
+      };
+      const response = await executeWithAuth(token =>
+        eventsClient.createEvent(token, createEventReq)
+      );
       const newEvent: CalendarEvent = {
         ...eventData,
-        id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: response.eventId,
         createdAt: new Date().toISOString(),
       };
-      
       setEvents(prev => [...prev, newEvent]);
       showNotification('success', 'Событие успешно добавлено!');
     } catch (err) {
@@ -82,7 +91,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [showNotification]);
+  }, [showNotification, executeWithAuth]);
 
   const deleteEvent = useCallback(async (eventId: string) => {
     setIsLoading(true);
