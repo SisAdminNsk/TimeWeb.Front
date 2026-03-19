@@ -1,6 +1,9 @@
 import type {
+  AcceptEventResponse,
     CreateEventRequest,
     CreateEventResponse,
+    DeclieEventResponse,
+    DetailedEventDto,
     SearchNotificationsRequest,
     SearchNotificationsResponse
 } from './EventsContracts';
@@ -26,6 +29,30 @@ export const eventsClient = {
       body: JSON.stringify(request)
     });
     return handleResponse<SearchNotificationsResponse>(response);
+  },
+
+  getEventDetails: async(authToken: string, eventId: string): Promise<DetailedEventDto> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}`, {
+      method: 'GET',
+      headers: getHeaders(authToken)
+    });
+    return handleResponse<DetailedEventDto>(response);
+  },
+
+  acceptEvent: async(authToken: string, eventId: string): Promise<AcceptEventResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}/accept`, {
+      method: 'POST',
+      headers: getHeaders(authToken)
+    });
+    return handleResponse<AcceptEventResponse>(response);
+  },
+
+  declineEvent: async(authToken: string, eventId: string): Promise<DeclieEventResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}/decline`, {
+      method: 'POST',
+      headers: getHeaders(authToken)
+    });
+    return handleResponse<DeclieEventResponse>(response);
   }
 };
 

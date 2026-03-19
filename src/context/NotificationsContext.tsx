@@ -3,7 +3,12 @@ import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { eventsClient } from '../api/events/EventsClient';
 import type { ReactNode } from 'react';
-import type { NotificationDto, SearchNotificationsRequest, SearchNotificationsResponse } from '../api/events/EventsContracts';
+import type { 
+    NotificationDto, 
+    SearchNotificationsRequest, 
+    SearchNotificationsResponse,
+    DetailedEventDto 
+} from '../api/events/EventsContracts';
 
 export interface NotificationsContextType {
   notifications: NotificationDto[];
@@ -16,11 +21,12 @@ export interface NotificationsContextType {
   setType: (type: 'NewEvent' | 'EventUpdated' | 'EventDeclined') => void;
   setPage: (page: number) => void;
   refreshNotifications: (type?: 'NewEvent' | 'EventUpdated' | 'EventDeclined', page?: number) => Promise<void>;
-  onAccept: (notificationId: string) => Promise<void>;
-  onDecline: (notificationId: string) => Promise<void>;
+  onAccept: (eventId: string) => Promise<void>;
+  onDecline: (eventId: string) => Promise<void>;
   newNotificationIds: Set<string>;
   typeCounts: Record<'NewEvent' | 'EventUpdated' | 'EventDeclined', number>;
   totalNotificationsCount: number;
+  fetchEventDetails: (eventId: string) => Promise<DetailedEventDto | null>;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
@@ -53,6 +59,21 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
   const newNotificationTimersRef = useRef<Map<string, number>>(new Map());
   
   const hasLoadedOnce = useRef(false);
+
+  const fetchEventDetails = useCallback(async (eventId: string): Promise<DetailedEventDto | null> => {
+    try {
+      const eventDetails: DetailedEventDto = await executeWithAuth(token => {
+        if (!token) {
+          throw new Error('Auth token is missing');
+        }
+        return eventsClient.getEventDetails(token, eventId);
+      });
+      return eventDetails;
+    } catch (err) {
+      console.error(`[Notifications] Ошибка при получении деталей события ${eventId}:`, err);
+      return null;
+    }
+  }, [executeWithAuth]);
 
   const fetchCountByType = useCallback(async (notifType: 'NewEvent' | 'EventUpdated' | 'EventDeclined'): Promise<number> => {
     try {
@@ -206,27 +227,65 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
     }
   }, [executeWithAuth, type, page, addToast]);
 
-  const onAccept = useCallback(async (notificationId: string) => {
-    console.log('[Notifications] Принятие события:', notificationId);
-    addToast({
-      title: 'Принято',
-      message: 'Вы приняли приглашение на встречу',
-      type: 'success',
-    });
-    await refreshAllCounts();
-    await refreshNotifications(type, page, false);
-  }, [addToast, refreshAllCounts, refreshNotifications, type, page]);
+  const onAccept = useCallback(async (eventId: string) => {
+    console.log('[Notifications] Принятие события:', eventId);
+    
+    try {
+      await executeWithAuth(token => {
+        if (!token) {
+          throw new Error('Auth token is missing');
+        }
+        return eventsClient.acceptEvent(token, eventId);
+      });
+      
+      addToast({
+        title: 'Принято',
+        message: 'Вы приняли приглашение на встречу',
+        type: 'success',
+      });
+      
+      await refreshAllCounts();
+      await refreshNotifications(type, page, false);
+    } catch (err) {
+      console.error('[Notifications] Ошибка при принятии события:', err);
+      addToast({
+        title: 'Ошибка',
+        message: 'Не удалось принять приглашение',
+        type: 'error',
+      });
+      throw err;
+    }
+  }, [executeWithAuth, addToast, refreshAllCounts, refreshNotifications, type, page]);
 
-  const onDecline = useCallback(async (notificationId: string) => {
-    console.log('[Notifications] Отклонение события:', notificationId);
-    addToast({
-      title: 'Отклонено',
-      message: 'Вы отклонили приглашение на встречу',
-      type: 'warning',
-    });
-    await refreshAllCounts();
-    await refreshNotifications(type, page, false);
-  }, [addToast, refreshAllCounts, refreshNotifications, type, page]);
+  const onDecline = useCallback(async (eventId: string) => {
+    console.log('[Notifications] Отклонение события:', eventId);
+    
+    try {
+      await executeWithAuth(token => {
+        if (!token) {
+          throw new Error('Auth token is missing');
+        }
+        return eventsClient.declineEvent(token, eventId);
+      });
+      
+      addToast({
+        title: 'Отклонено',
+        message: 'Вы отклонили приглашение на встречу',
+        type: 'warning',
+      });
+      
+      await refreshAllCounts();
+      await refreshNotifications(type, page, false);
+    } catch (err) {
+      console.error('[Notifications] Ошибка при отклонении события:', err);
+      addToast({
+        title: 'Ошибка',
+        message: 'Не удалось отклонить приглашение',
+        type: 'error',
+      });
+      throw err;
+    }
+  }, [executeWithAuth, addToast, refreshAllCounts, refreshNotifications, type, page]);
 
   useEffect(() => {
     refreshAllCounts();
@@ -266,6 +325,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       newNotificationIds,
       typeCounts,
       totalNotificationsCount,
+      fetchEventDetails,
     }}>
       {children}
     </NotificationsContext.Provider>
