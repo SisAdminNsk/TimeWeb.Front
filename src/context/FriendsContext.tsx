@@ -78,6 +78,7 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const refreshFriends = useCallback(async (page: number = 1) => {
+    setIsLoading(true);
     try {
       const response = await executeWithAuth((token) => friendsClient.getFriends(token, page, PAGE_SIZE));
       setFriends(response.friends);
@@ -101,10 +102,13 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       if(apiError.statusCode !== 401) {
         setError(apiError);
       }
+    } finally {
+      setIsLoading(false);
     }
   }, [executeWithAuth]);
 
   const refreshIncomingInvites = useCallback(async (page: number = 1) => {
+    setIsLoading(true);
     try {
       const response = await executeWithAuth((token) => friendsClient.getInvites(token, true, page, PAGE_SIZE));
       setIncomingInvites(response.invites);
@@ -128,10 +132,13 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       if(apiError.statusCode !== 401) {
         setError(apiError);
       }
+    } finally {
+      setIsLoading(false);
     }
   }, [executeWithAuth]);
 
   const refreshOutgoingInvites = useCallback(async (page: number = 1) => {
+    setIsLoading(true);
     try {
       const response = await executeWithAuth((token) => friendsClient.getInvites(token, false, page, PAGE_SIZE));
       setOutgoingInvites(response.invites);
@@ -155,6 +162,8 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
       if(apiError.statusCode !== 401) {
         setError(apiError);
       }
+    } finally {
+      setIsLoading(false);
     }
   }, [executeWithAuth]);
 

@@ -1,13 +1,14 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { useToast } from './ToastContext';
 import { eventsClient } from '../api/events/EventsClient';
 import type { ReactNode } from 'react';
 import type { NotificationDto, SearchNotificationsRequest, SearchNotificationsResponse } from '../api/events/EventsContracts';
 
 export interface NotificationsContextType {
   notifications: NotificationDto[];
-  isLoading: boolean; // Статус текущего запроса (в том числе фонового)
-  isInitialLoading: boolean; // Статус только первой загрузки
+  isLoading: boolean;
+  isInitialLoading: boolean;
   totalCount: number;
   page: number;
   pageSize: number;
@@ -17,34 +18,93 @@ export interface NotificationsContextType {
   refreshNotifications: (type?: 'NewEvent' | 'EventUpdated' | 'EventDeclined', page?: number) => Promise<void>;
   onAccept: (notificationId: string) => Promise<void>;
   onDecline: (notificationId: string) => Promise<void>;
-  onDontShowAgain: (notificationId: string, checked: boolean) => Promise<void>;
   newNotificationIds: Set<string>;
+  typeCounts: Record<'NewEvent' | 'EventUpdated' | 'EventDeclined', number>;
+  totalNotificationsCount: number;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
 export const PAGE_SIZE = 10;
 const NEW_NOTIFICATION_ANIMATION_DURATION = 10000;
+const POLLING_INTERVAL = 10000;
+
+const NOTIFICATION_TYPES = ['NewEvent', 'EventUpdated', 'EventDeclined'] as const;
 
 export const NotificationsProvider = ({ children }: { children: ReactNode }) => {
   const { executeWithAuth } = useAuth();
+  const { addToast } = useToast();
+  
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true); // Новое состояние
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [type, setType] = useState<'NewEvent' | 'EventUpdated' | 'EventDeclined'>('NewEvent');
-  const [newNotificationIds, setNewNotificationIds] = useState<Set<string>>(new Set());
   
+  const [typeCounts, setTypeCounts] = useState<Record<'NewEvent' | 'EventUpdated' | 'EventDeclined', number>>({
+    NewEvent: 0,
+    EventUpdated: 0,
+    EventDeclined: 0,
+  });
+  
+  const [newNotificationIds, setNewNotificationIds] = useState<Set<string>>(new Set());
   const previousNotificationIds = useRef<Set<string>>(new Set());
   const newNotificationTimersRef = useRef<Map<string, number>>(new Map());
-  const hasLoadedOnce = useRef(false); // Флаг первой загрузки
+  
+  const hasLoadedOnce = useRef(false);
 
-  const refreshNotifications = useCallback(async (notifType?: 'NewEvent' | 'EventUpdated' | 'EventDeclined', notifPage?: number) => {
+  const fetchCountByType = useCallback(async (notifType: 'NewEvent' | 'EventUpdated' | 'EventDeclined'): Promise<number> => {
+    try {
+      const req = {
+        eventId: null,
+        type: notifType,
+        recipientStatus: 'NoReaction' as const,
+        pageSize: 1,
+        pageNumber: 1,
+      } as SearchNotificationsRequest;
+
+      const resp: SearchNotificationsResponse = await executeWithAuth(token => {
+        if (!token) {
+          throw new Error('Auth token is missing');
+        }
+        return eventsClient.searchNotifications(token, req);
+      });
+
+      return resp?.totalCount ?? 0;
+    } catch (err) {
+      console.error(`[Notifications] Ошибка при получении счетчика для ${notifType}:`, err);
+      return 0;
+    }
+  }, [executeWithAuth]);
+
+  const refreshAllCounts = useCallback(async () => {
+    const counts = await Promise.all(
+      NOTIFICATION_TYPES.map(async (t) => {
+        const count = await fetchCountByType(t);
+        return { type: t, count };
+      })
+    );
+
+    setTypeCounts({
+      NewEvent: counts.find(c => c.type === 'NewEvent')?.count ?? 0,
+      EventUpdated: counts.find(c => c.type === 'EventUpdated')?.count ?? 0,
+      EventDeclined: counts.find(c => c.type === 'EventDeclined')?.count ?? 0,
+    });
+  }, [fetchCountByType]);
+
+  const refreshNotifications = useCallback(async (
+    notifType?: 'NewEvent' | 'EventUpdated' | 'EventDeclined', 
+    notifPage?: number,
+    isPolling: boolean = false
+  ) => {
     const targetType = notifType ?? type;
     const targetPage = notifPage ?? page;
 
-    setIsLoading(true);
+    if (!isPolling) {
+      setIsLoading(true);
+    }
+
     try {
       const req = {
         eventId: null,
@@ -67,15 +127,36 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         return;
       }
 
+      const currentIds = new Set<string>();
       const newIds = new Set<string>();
+
       resp.notifications.forEach(n => {
         const id = `${n.eventId}-${n.createdAt}`;
-        if (!previousNotificationIds.current.has(id)) {
+        currentIds.add(id);
+        
+        if (hasLoadedOnce.current && !previousNotificationIds.current.has(id)) {
           newIds.add(id);
         }
       });
 
-      if (newIds.size > 0) {
+      if (isPolling && targetPage === 1 && newIds.size > 0) {
+        const typeLabels = {
+          'NewEvent': 'новая встреча',
+          'EventUpdated': 'изменение встречи',
+          'EventDeclined': 'отмена встречи',
+        };
+        
+        const label = typeLabels[targetType];
+        const message = newIds.size === 1 
+          ? `${label}` 
+          : `Новых встреч: ${newIds.size}`;
+
+        addToast({
+          title: 'Новое уведомление',
+          message: message,
+          type: 'info',
+        });
+
         setNewNotificationIds(prev => {
           const updated = new Set(prev);
           newIds.forEach(id => updated.add(id));
@@ -96,12 +177,15 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         });
       }
 
-      previousNotificationIds.current = new Set(resp.notifications.map(n => `${n.eventId}-${n.createdAt}`));
+      previousNotificationIds.current = currentIds;
       
       setNotifications(resp.notifications);
       setTotalCount(resp.totalCount);
+      setTypeCounts(prev => ({
+        ...prev,
+        [targetType]: resp.totalCount,
+      }));
 
-      // После первого успешного запроса убираем флаг первоначальной загрузки
       if (!hasLoadedOnce.current) {
         setIsInitialLoading(false);
         hasLoadedOnce.current = true;
@@ -109,7 +193,6 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
 
     } catch (err) {
       console.error('[Notifications] Ошибка при загрузке:', err);
-      // При ошибке тоже считаем, что попытка загрузки была
       if (!hasLoadedOnce.current) {
         setIsInitialLoading(false);
         hasLoadedOnce.current = true;
@@ -117,46 +200,60 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       setNotifications([]);
       setTotalCount(0);
     } finally {
-      setIsLoading(false);
+      if (!isPolling) {
+        setIsLoading(false);
+      }
     }
-  }, [executeWithAuth, type, page]);
+  }, [executeWithAuth, type, page, addToast]);
 
   const onAccept = useCallback(async (notificationId: string) => {
     console.log('[Notifications] Принятие события:', notificationId);
-    alert(`Событие ${notificationId} принято (заглушка)`);
-  }, []);
+    addToast({
+      title: 'Принято',
+      message: 'Вы приняли приглашение на встречу',
+      type: 'success',
+    });
+    await refreshAllCounts();
+    await refreshNotifications(type, page, false);
+  }, [addToast, refreshAllCounts, refreshNotifications, type, page]);
 
   const onDecline = useCallback(async (notificationId: string) => {
     console.log('[Notifications] Отклонение события:', notificationId);
-    alert(`Событие ${notificationId} отклонено (заглушка)`);
-  }, []);
-
-  const onDontShowAgain = useCallback(async (notificationId: string, checked: boolean) => {
-    console.log('[Notifications] "Больше не показывать" для:', notificationId, checked);
-    if (checked) {
-      alert(`Уведомление ${notificationId} больше не будет показано (заглушка)`);
-    }
-  }, []);
+    addToast({
+      title: 'Отклонено',
+      message: 'Вы отклонили приглашение на встречу',
+      type: 'warning',
+    });
+    await refreshAllCounts();
+    await refreshNotifications(type, page, false);
+  }, [addToast, refreshAllCounts, refreshNotifications, type, page]);
 
   useEffect(() => {
-    refreshNotifications(type, page);
+    refreshAllCounts();
+  }, [refreshAllCounts]);
+
+  useEffect(() => {
+    refreshNotifications(type, page, false);
     
     const interval = setInterval(() => {
-      refreshNotifications(type, page);
-    }, 10000);
+      refreshNotifications(type, page, true);
+      refreshAllCounts();
+    }, POLLING_INTERVAL);
 
     return () => {
       clearInterval(interval);
       newNotificationTimersRef.current.forEach((timer) => clearTimeout(timer));
       newNotificationTimersRef.current.clear();
     };
-  }, [type, page, refreshNotifications]);
+  }, [type, page, refreshNotifications, refreshAllCounts]);
+
+  const totalNotificationsCount = Object.values(typeCounts).reduce((sum, count) => sum + count, 0);
 
   return (
     <NotificationsContext.Provider value={{
       notifications,
       isLoading,
-      isInitialLoading, // Экспортируем новое поле
+      isInitialLoading,
       totalCount,
       page,
       pageSize: PAGE_SIZE,
@@ -166,8 +263,9 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       refreshNotifications,
       onAccept,
       onDecline,
-      onDontShowAgain,
       newNotificationIds,
+      typeCounts,
+      totalNotificationsCount,
     }}>
       {children}
     </NotificationsContext.Provider>

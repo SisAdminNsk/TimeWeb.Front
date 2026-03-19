@@ -3,10 +3,11 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { theme } from '../styles/theme';
+import ToastContainer from '../components/ToastContainer';
 
 export const LayoutPage = () => {
   const { user, logout } = useAuth();
-  const { totalCount } = useNotifications(); 
+  const { totalNotificationsCount } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const { colors, typography, spacing, borderRadius, transitions, shadows } = theme;
@@ -92,7 +93,7 @@ export const LayoutPage = () => {
     display: 'flex',
     flexDirection: 'column',
     padding: spacing.lg,
-    position: isMobile ? 'fixed' : 'fixed',
+    position: 'fixed',
     height: '100vh',
     left: isMobile ? (isMobileMenuOpen ? '0' : '-100%') : '0',
     top: '0',
@@ -184,7 +185,7 @@ export const LayoutPage = () => {
     minWidth: '20px',
     height: '20px',
     padding: `0 ${spacing.xs}`,
-    backgroundColor: totalCount > 0 ? colors.error : colors.gray400,
+    backgroundColor: totalNotificationsCount > 0 ? colors.error : colors.gray400,
     color: colors.white,
     borderRadius: borderRadius.full,
     fontSize: typography.fontSize.xs,
@@ -267,6 +268,9 @@ export const LayoutPage = () => {
 
   return (
     <div style={containerStyle}>
+      {/* Toast-уведомления - видны на всех страницах */}
+      <ToastContainer />
+
       {isMobile && (
         <div 
           style={overlayStyle} 
@@ -302,20 +306,21 @@ export const LayoutPage = () => {
         )}
 
         <nav style={navStyle}>
-          <Link to="/cabinet" style={navItemStyle('/cabinet')} onClick={handleNavClick}>
-            Личный кабинет
+           <Link to="/notifications" style={navItemStyle('/notifications')} onClick={handleNavClick}>
+            <span>Новости по встречам</span>
+            {/* Общий суммарный счетчик всех уведомлений */}
+            <span style={notificationBadgeStyle}>
+              {totalNotificationsCount > 99 ? '99+' : totalNotificationsCount}
+            </span>
           </Link>
-          <Link to="/events" style={navItemStyle('/events')} onClick={handleNavClick}>
+           <Link to="/events" style={navItemStyle('/events')} onClick={handleNavClick}>
             Календарь встреч
           </Link>
+          <Link to="/cabinet" style={navItemStyle('/cabinet')} onClick={handleNavClick}>
+            Личный кабинет
+          </Link>   
           <Link to="/friends" style={navItemStyle('/friends')} onClick={handleNavClick}>
             Друзья
-          </Link>
-          <Link to="/notifications" style={navItemStyle('/notifications')} onClick={handleNavClick}>
-            <span>Уведомления</span>
-            <span style={notificationBadgeStyle}>
-              {totalCount > 99 ? '99+' : totalCount}
-            </span>
           </Link>
         </nav>
 

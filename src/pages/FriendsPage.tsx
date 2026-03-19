@@ -44,7 +44,6 @@ export const FriendsPage = () => {
   const [activeSection, setActiveSection] = useState<SectionType>('friends');
   const [usernameInput, setUsernameInput] = useState('');
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
-
   const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
@@ -1283,9 +1282,9 @@ export const FriendsPage = () => {
           {notification && (
             <div style={getNotificationStyle(notification.type)}>
               <span style={{ flex: isMobile ? '1 1 100%' : 'auto' }}>
-                {notification.type === 'success'}
-                {notification.type === 'error'}
-                {notification.type === 'info'}
+                {notification.type === 'success' && '✓ '}
+                {notification.type === 'error' && '✕ '}
+                {notification.type === 'info' && 'ℹ '}
                 {notification.message}
               </span>
               <button
@@ -1337,7 +1336,8 @@ export const FriendsPage = () => {
             </div>
           )}
 
-          {isLoading && !isRefreshingAll && (
+          {/* 🔹 Индикатор загрузки - показываем всегда при isLoading */}
+          {isLoading && (
             <div style={sectionCardStyle}>
               <div style={emptyStateStyle}>
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="2" style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }}>

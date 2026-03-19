@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import { CabinetProvider } from './context/CabinetContext';
 import { FriendsProvider } from './context/FriendsContext';
 import { NotificationsProvider } from './context/NotificationsContext';
@@ -84,69 +85,71 @@ export const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route 
-            path="/sign-in" 
-            element={
-              <PublicRoute>
-                <SignInPage />
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/sign-up" 
-            element={
-              <PublicRoute>
-                <SignUpPage />
-              </PublicRoute>
-            } 
-          />
-          
-          <Route 
-            path="/" 
-            element={
-              <ProtectedRoute>
-                <NotificationsProvider>
-                  <LayoutPage />
-                </NotificationsProvider>
-              </ProtectedRoute>
-            }
-          >
+        <ToastProvider> {/* <-- Добавлен ToastProvider */}
+          <Routes>
             <Route 
-              index 
+              path="/sign-in" 
+              element={
+                <PublicRoute>
+                  <SignInPage />
+                </PublicRoute>
+              } 
+            />
+            <Route 
+              path="/sign-up" 
+              element={
+                <PublicRoute>
+                  <SignUpPage />
+                </PublicRoute>
+              } 
+            />
+            
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <NotificationsProvider>
+                    <LayoutPage />
+                  </NotificationsProvider>
+                </ProtectedRoute>
+              }
+            >
+              <Route 
+                index 
+                element={<Navigate to="/cabinet" replace />} 
+              />
+              <Route 
+                path="cabinet" 
+                element={
+                  <CabinetProvider>
+                    <CabinetPage />
+                  </CabinetProvider>
+                } 
+              />
+              <Route 
+                path="events" 
+                element={<EventsPage />} 
+              />
+              <Route 
+                path="friends" 
+                element={
+                  <FriendsProvider>
+                    <FriendsPage />
+                  </FriendsProvider>
+                } 
+              />
+              <Route 
+                path="notifications" 
+                element={<NotificationsPage />} 
+              />
+            </Route>
+            
+            <Route 
+              path="*" 
               element={<Navigate to="/cabinet" replace />} 
             />
-            <Route 
-              path="cabinet" 
-              element={
-                <CabinetProvider>
-                  <CabinetPage />
-                </CabinetProvider>
-              } 
-            />
-            <Route 
-              path="events" 
-              element={<EventsPage />} 
-            />
-            <Route 
-              path="friends" 
-              element={
-                <FriendsProvider>
-                  <FriendsPage />
-                </FriendsProvider>
-              } 
-            />
-            <Route 
-              path="notifications" 
-              element={<NotificationsPage />} 
-            />
-          </Route>
-          
-          <Route 
-            path="*" 
-            element={<Navigate to="/cabinet" replace />} 
-          />
-        </Routes>
+          </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );
