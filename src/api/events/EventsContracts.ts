@@ -6,6 +6,10 @@ export interface CreateEventRequest {
   memberIds: string[]
 }
 
+export interface RemoveEventRequest{
+    deletedReason: string | null
+}
+
 export interface CreateEventResponse{
     eventId: string
 }
@@ -14,19 +18,38 @@ export interface SearchEventsRequest{
     startAt: string,
     endAt: string,
     memberId: string | null,
-    status: 'Pending' | 'Accepted' | 'Declined',
+    status: 'Pending' | 'Accepted' | 'Declined' | null,
     pageSize: number,
     pageNumber: number
 }
 
 export interface SearchEventsResponse{
-    
+    totalCount: number,
+    events: EventDto[]
+}
+
+export interface EventDto{
+    id: string,
+    initiatorId: string,
+    members: EventMemberDto[],
+    title: string,
+    description: string,
+    startAt: string,
+    endAt: string,
+    createdAt: string
+}
+
+export interface EventMemberDto{
+    id: string,
+    status: 'Pending' | 'Accepted' | 'Declined',
+    respondedAt: string | null
 }
 
 export interface SearchNotificationsRequest{
     eventId: string | null,
     type: 'NewEvent' | 'EventUpdated' | 'EventDeclined' | null,
-    recipientStatus: 'NoReaction' | 'AcceptedEvent' | 'DeclinedEvent' | 'NotShow' | null
+    recipientStatus: 'NoReaction' | 'AcceptedEvent' | 'DeclinedEvent' | 'NotShow' | null,
+    includeDeleted: boolean | null
     pageSize: number,
     pageNumber: number
 }
@@ -64,7 +87,9 @@ export interface DetailedEventDto{
     description: string,
     startAt: string,
     endAt: string,
-    createdAt: string
+    createdAt: string,
+    deletedAt: string | null,
+    deletedReason: string | null
 }
 
 export interface AcceptEventResponse{

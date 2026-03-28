@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
+import { useEvents } from '../context/EventsContext';
 import { theme } from '../styles/theme';
 import ToastContainer from '../components/ToastContainer';
 
 export const LayoutPage = () => {
   const { user, logout } = useAuth();
   const { totalNotificationsCount } = useNotifications();
+  const { events, initiatorEvents } = useEvents();
   const navigate = useNavigate();
   const location = useLocation();
   const { colors, typography, spacing, borderRadius, transitions, shadows } = theme;
@@ -76,6 +78,21 @@ export const LayoutPage = () => {
       setIsMobileMenuOpen(false);
     }
   };
+
+  // Подсчет всех событий на текущий месяц
+  const getEventsCountForMonth = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const allEvents = [...events, ...initiatorEvents];
+    return allEvents.filter(event => {
+      const eventDate = new Date(event.date);
+      return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
+    }).length;
+  };
+
+  const eventsCountForMonth = getEventsCountForMonth();
 
   const containerStyle: React.CSSProperties = {
     display: 'flex',
@@ -314,7 +331,11 @@ export const LayoutPage = () => {
             </span>
           </Link>
            <Link to="/events" style={navItemStyle('/events')} onClick={handleNavClick}>
-            Календарь встреч
+            <span>Календарь встреч</span>
+            {/* Счетчик встреч на текущий месяц */}
+            <span style={notificationBadgeStyle}>
+              {eventsCountForMonth > 99 ? '99+' : eventsCountForMonth}
+            </span>
           </Link>
           <Link to="/cabinet" style={navItemStyle('/cabinet')} onClick={handleNavClick}>
             Личный кабинет

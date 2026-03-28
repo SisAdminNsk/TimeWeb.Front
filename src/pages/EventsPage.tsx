@@ -1,17 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { EventsProvider, useEvents } from '../context/EventsContext';
-import { FriendsProvider } from '../context/FriendsContext';
+import { useEvents } from '../context/EventsContext';
 import { CalendarWidget } from '../components/CalendarWidget';
 import { EventsList } from '../components/EventList';
 import { AddEventModal } from '../components/AddEventModal';
 import { theme } from '../styles/theme';
 
 const EventsPageContent = () => {
-  const { selectedDate, selectDate, notification, clearNotification } = useEvents();
+  const { selectedDate, selectDate, refetchEvents } = useEvents();
   const { colors, typography, spacing, borderRadius } = theme;
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
+
+  useEffect(() => {
+    refetchEvents();
+  }, [refetchEvents]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refetchEvents();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refetchEvents]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -58,27 +72,6 @@ const EventsPageContent = () => {
     alignItems: 'start',
   };
 
-  const notificationStyle = (type: 'success' | 'error' | 'info'): React.CSSProperties => ({
-    padding: `${spacing.sm} ${spacing.md}`,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.lg,
-    fontSize: typography.fontSize.sm,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: type === 'success' ? colors.successLight 
-      : type === 'error' ? colors.errorLight 
-      : colors.infoLight,
-    color: type === 'success' ? colors.successDark 
-      : type === 'error' ? colors.errorDark 
-      : colors.infoDark,
-    border: `1px solid ${type === 'success' ? colors.success 
-      : type === 'error' ? colors.error 
-      : colors.info}`,
-    flexWrap: isMobile ? 'wrap' : 'nowrap',
-  });
-
   return (
     <div style={containerStyle}>
       <header style={headerStyle}>
@@ -89,37 +82,6 @@ const EventsPageContent = () => {
           Планируйте встречи и приглашайте друзей
         </p>
       </header>
-
-      {notification && (
-        <div style={notificationStyle(notification.type)}>
-          <span style={{ flex: isMobile ? '1 1 100%' : 'auto' }}>
-            {notification.type === 'success' && '✓ '}
-            {notification.type === 'error' && '⚠️ '}
-            {notification.type === 'info' && 'ℹ️ '}
-            {notification.message}
-          </span>
-          <button
-            onClick={clearNotification}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer', 
-              fontSize: '18px', 
-              padding: isMobile ? '8px' : '0 4px', 
-              color: 'inherit',
-              outline: 'none',
-              minWidth: '32px',
-              minHeight: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-label="Закрыть уведомление"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       <div style={gridStyle}>
         <CalendarWidget 
@@ -144,13 +106,7 @@ const EventsPageContent = () => {
 };
 
 export const EventsPage = () => {
-  return (
-    <FriendsProvider>
-      <EventsProvider>
-        <EventsPageContent />
-      </EventsProvider>
-    </FriendsProvider>
-  );
+  return <EventsPageContent />;
 };
 
 export default EventsPage;

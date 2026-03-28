@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useEvents } from '../context/EventsContext';
+import { useToast } from '../context/ToastContext';
 import { theme } from '../styles/theme';
 import { FriendsSelector } from './FriendsSelector';
 
@@ -15,6 +16,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   selectedDate
 }) => {
   const { addEvent, isLoading } = useEvents();
+  const { addToast } = useToast();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   
   const [title, setTitle] = useState('');
@@ -57,6 +59,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         friendIds: selectedFriendIds,
       });
       
+      addToast({
+        title: 'Встреча создана',
+        message: 'Встреча успешно добавлена в календарь',
+        type: 'success',
+      });
+      
       setTitle('');
       setDescription('');
       setStartTime('09:00');
@@ -66,6 +74,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Failed to add event:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Не удалось создать встречу';
+      addToast({
+        title: 'Ошибка',
+        message: errorMessage,
+        type: 'error',
+      });
     }
   };
 
@@ -153,6 +167,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       fontSize: typography.fontSize.base,
       transition: `all ${transitions.fast}`,
       boxSizing: 'border-box' as const,
+      fontFamily: 'inherit',
+      color: colors.gray900,
+    } as React.CSSProperties,
+    // Новый стиль специально для инпутов времени
+    timeInput: {
+      width: '100%',
+      padding: `${spacing.sm} ${spacing.md}`,
+      border: `1px solid ${colors.gray300}`,
+      borderRadius: borderRadius.md,
+      fontSize: typography.fontSize.base,
+      fontWeight: typography.fontWeight.medium, // Более насыщенный шрифт
+      textAlign: 'center' as const, // Центрирование времени
+      color: colors.gray900,
+      transition: `all ${transitions.fast}`,
+      boxSizing: 'border-box' as const,
+      fontFamily: 'inherit',
+      backgroundColor: colors.white,
     } as React.CSSProperties,
     textarea: {
       width: '100%',
@@ -240,6 +271,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       fontSize: typography.fontSize.xs,
       fontWeight: typography.fontWeight.semibold,
     } as React.CSSProperties,
+    // Стиль для подписей под временем
+    timeSubLabel: {
+      fontSize: typography.fontSize.xs,
+      color: colors.gray500,
+      marginTop: spacing.xs,
+      textAlign: 'center' as const,
+      fontWeight: typography.fontWeight.medium,
+    } as React.CSSProperties,
   };
 
   return (
@@ -303,13 +342,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                     style={{
-                      ...styles.input,
+                      ...styles.timeInput,
                       borderColor: errors.startTime ? colors.error : colors.gray300,
                     }}
                     disabled={isLoading}
+                    onFocus={(e) => e.target.style.borderColor = colors.primary}
+                    onBlur={(e) => e.target.style.borderColor = errors.startTime ? colors.error : colors.gray300}
                   />
                   {errors.startTime && <div style={styles.error}>{errors.startTime}</div>}
-                  <div style={{ fontSize: typography.fontSize.xs, color: colors.gray500, marginTop: spacing.xs }}>
+                  <div style={styles.timeSubLabel}>
                     Начало
                   </div>
                 </div>
@@ -319,13 +360,15 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                     style={{
-                      ...styles.input,
+                      ...styles.timeInput,
                       borderColor: errors.endTime ? colors.error : colors.gray300,
                     }}
                     disabled={isLoading}
+                    onFocus={(e) => e.target.style.borderColor = colors.primary}
+                    onBlur={(e) => e.target.style.borderColor = errors.endTime ? colors.error : colors.gray300}
                   />
                   {errors.endTime && <div style={styles.error}>{errors.endTime}</div>}
-                  <div style={{ fontSize: typography.fontSize.xs, color: colors.gray500, marginTop: spacing.xs }}>
+                  <div style={styles.timeSubLabel}>
                     Окончание
                   </div>
                 </div>
@@ -433,6 +476,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             opacity: 1;
             transform: translateY(0);
           }
+        }
+        /* Убираем стандартные иконки календаря/часов в некоторых браузерах для чистоты */
+        input[type="time"]::-webkit-calendar-picker-indicator {
+          cursor: pointer;
+          opacity: 0.6;
+        }
+        input[type="time"]::-webkit-calendar-picker-indicator:hover {
+          opacity: 1;
         }
       `}</style>
     </div>

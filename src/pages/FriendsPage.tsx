@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useFriends } from '../context/FriendsContext';
+import { useToast } from '../context/ToastContext';
+import { ToastContainer } from '../components/ToastContainer';
 import { theme } from '../styles/theme';
 
 type SectionType = 'friends' | 'incoming' | 'outgoing' | 'add';
@@ -39,6 +41,7 @@ export const FriendsPage = () => {
     clearNotification,
   } = useFriends();
 
+  const { addToast } = useToast();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
 
   const [activeSection, setActiveSection] = useState<SectionType>('friends');
@@ -77,6 +80,18 @@ export const FriendsPage = () => {
       setIsSidebarOpen(false);
     }
   }, [activeSection, isMobile]);
+
+  useEffect(() => {
+    if (notification) {
+      addToast({
+        title: notification.type === 'success' ? 'Успешно' : 
+               notification.type === 'error' ? 'Ошибка' : 'Информация',
+        message: notification.message,
+        type: notification.type,
+      });
+      clearNotification();
+    }
+  }, [notification, addToast, clearNotification]);
 
   const friendsTotalPages = Math.ceil(friendsTotalCount / pageSize);
   const incomingTotalPages = Math.ceil(incomingTotalCount / pageSize);
@@ -843,27 +858,6 @@ export const FriendsPage = () => {
             {friendsTotalCount} {friendsTotalCount === 1 ? 'друг' : friendsTotalCount < 5 ? 'друга' : 'друзей'}
           </p>
         </div>
-        <button
-          onClick={handleRefreshAll}
-          disabled={isRefreshingAll}
-          style={refreshButtonStyle}
-        >
-          <svg
-            style={refreshIconStyle(isRefreshingAll)}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-            <path d="M16 21h5v-5" />
-          </svg>
-          {isMobile ? '' : (isRefreshingAll ? 'Обновление...' : 'Обновить')}
-        </button>
       </div>
       <div style={sectionBodyStyle}>
         {friendsList.length === 0 ? (
@@ -891,10 +885,6 @@ export const FriendsPage = () => {
                   <div style={listItemContentStyle}>
                     <div style={listItemTitleStyle}>{getFriendName(friend)}</div>
                     <div style={listItemMetaStyle}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.gray400} strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 6v6l4 2" />
-                      </svg>
                       <span>
                         В друзьях с {friend.friendshipStartDate ? new Date(friend.friendshipStartDate).toLocaleDateString('ru-RU') : '-'}
                       </span>
@@ -930,27 +920,6 @@ export const FriendsPage = () => {
             {incomingTotalCount} {incomingTotalCount === 1 ? 'заявка' : incomingTotalCount < 5 ? 'заявки' : 'заявок'} в друзья
           </p>
         </div>
-        <button
-          onClick={handleRefreshAll}
-          disabled={isRefreshingAll}
-          style={refreshButtonStyle}
-        >
-          <svg
-            style={refreshIconStyle(isRefreshingAll)}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-            <path d="M16 21h5v-5" />
-          </svg>
-          {isMobile ? '' : (isRefreshingAll ? 'Обновление...' : 'Обновить')}
-        </button>
       </div>
       <div style={sectionBodyStyle}>
         {incomingList.length === 0 ? (
@@ -1022,27 +991,6 @@ export const FriendsPage = () => {
             {outgoingTotalCount} {outgoingTotalCount === 1 ? 'заявка' : outgoingTotalCount < 5 ? 'заявки' : 'заявок'} ожидает подтверждения
           </p>
         </div>
-        <button
-          onClick={handleRefreshAll}
-          disabled={isRefreshingAll}
-          style={refreshButtonStyle}
-        >
-          <svg
-            style={refreshIconStyle(isRefreshingAll)}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-            <path d="M16 21h5v-5" />
-          </svg>
-          {isMobile ? '' : (isRefreshingAll ? 'Обновление...' : 'Обновить')}
-        </button>
       </div>
       <div style={sectionBodyStyle}>
         {outgoingList.length === 0 ? (

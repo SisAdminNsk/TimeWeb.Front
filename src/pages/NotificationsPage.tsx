@@ -7,7 +7,6 @@ import EventModal from '../components/EventModal';
 
 const tabTypes = [
   { key: 'NewEvent', label: 'Новые встречи' },
-  { key: 'EventUpdated', label: 'Изменения по встречам' },
   { key: 'EventDeclined', label: 'Отмененные встречи' },
 ];
 
@@ -78,10 +77,14 @@ export const NotificationsPage: React.FC = () => {
   useEffect(() => {
     const loadEventDetails = async () => {
       const newCache = { ...eventDetailsCache };
+      // Определяем includeDeleted на основе текущего типа уведомления
+      // Для вкладки "Отмененные встречи" (EventDeclined) используем includeDeleted = true
+      const includeDeleted = type === 'EventDeclined';
+      
       for (const notification of notifications) {
         if (!newCache[notification.eventId]) {
           try {
-            const details = await fetchEventDetails(notification.eventId);
+            const details = await fetchEventDetails(notification.eventId, includeDeleted);
             if (details) {
               newCache[notification.eventId] = details;
             }
@@ -96,7 +99,7 @@ export const NotificationsPage: React.FC = () => {
     if (notifications.length > 0) {
       loadEventDetails();
     }
-  }, [notifications, fetchEventDetails]);
+  }, [notifications, fetchEventDetails, type]);
 
   return (
     <>
@@ -308,68 +311,156 @@ export const NotificationsPage: React.FC = () => {
                     <div style={{
                       fontSize: typography.fontSize.xs,
                       color: colors.gray500,
-                      marginBottom: spacing.lg,
+                      marginBottom: spacing.sm,
                     }}>
                       Получено: {new Date(n.createdAt).toLocaleString()}
                     </div>
+
+                    {/* Дата и время проведения встречи */}
+                    {eventDetails && (
+                      <div style={{
+                        fontSize: typography.fontSize.xs,
+                        color: colors.gray600,
+                        marginBottom: spacing.md,
+                        paddingBottom: spacing.md,
+                        borderBottom: `1px solid ${colors.gray100}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.gray500} strokeWidth="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                          </svg>
+                          <span>
+                            {new Date(eventDetails.startAt).toLocaleDateString('ru-RU', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              weekday: 'long'
+                            })}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.xs }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.gray500} strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          <span>
+                            {new Date(eventDetails.startAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - {new Date(eventDetails.endAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Описание события */}
+                    {eventDetails?.description && (
+                      <div style={{
+                        fontSize: typography.fontSize.sm,
+                        color: colors.gray700,
+                        marginBottom: spacing.md,
+                        paddingBottom: spacing.md,
+                        borderBottom: `1px solid ${colors.gray100}`,
+                        lineHeight: 1.5,
+                      }}>
+                        <div style={{ fontWeight: typography.fontWeight.medium, marginBottom: spacing.xs }}>
+                          Описание:
+                        </div>
+                        {eventDetails.description}
+                      </div>
+                    )}
+
+                    {/* ТОЛЬКО для вкладки "Отменные встречи" - информация об удалении */}
+                    {type === 'EventDeclined' && eventDetails && (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: spacing.sm,
+                        marginTop: spacing.md,
+                        flexWrap: 'wrap',
+                      }}>
+                        <span style={{
+                          display: 'inline-block',
+                          backgroundColor: colors.gray200,
+                          color: colors.gray700,
+                          padding: `${spacing.xs} ${spacing.sm}`,
+                          borderRadius: borderRadius.full,
+                          fontSize: typography.fontSize.xs,
+                          fontWeight: typography.fontWeight.semibold,
+                        }}>
+                          Отменена
+                        </span>
+                        {eventDetails.deletedReason && (
+                          <span style={{
+                            fontSize: typography.fontSize.xs,
+                            color: colors.gray600,
+                          }}>
+                            • {eventDetails.deletedReason}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: spacing.sm,
-                      flexWrap: 'wrap',
-                      paddingTop: spacing.md,
-                      borderTop: `1px solid ${colors.gray100}`,
-                    }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAccept(n.eventId);
-                        }}
-                        style={{
-                          padding: `${spacing.xs} ${spacing.md}`,
-                          background: colors.success,
-                          color: colors.white,
-                          border: 'none',
-                          borderRadius: borderRadius.md,
-                          fontWeight: typography.fontWeight.medium,
-                          fontSize: typography.fontSize.sm,
-                          cursor: 'pointer',
-                          transition: `all ${transitions.fast}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: spacing.xs,
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = colors.successDark}
-                        onMouseLeave={(e) => e.currentTarget.style.background = colors.success}
-                      >
-                        <span>✓</span> Принять
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDecline(n.eventId);
-                        }}
-                        style={{
-                          padding: `${spacing.xs} ${spacing.md}`,
-                          background: colors.error,
-                          color: colors.white,
-                          border: 'none',
-                          borderRadius: borderRadius.md,
-                          fontWeight: typography.fontWeight.medium,
-                          fontSize: typography.fontSize.sm,
-                          cursor: 'pointer',
-                          transition: `all ${transitions.fast}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: spacing.xs,
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = colors.errorDark}
-                        onMouseLeave={(e) => e.currentTarget.style.background = colors.error}
-                      >
-                        <span>✕</span> Отклонить
-                      </button>
-                    </div>
+                    {/* Кнопки действия - ТОЛЬКО для "Новые встречи" и "Изменения" */}
+                    {type !== 'EventDeclined' && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: spacing.sm,
+                        flexWrap: 'wrap',
+                        paddingTop: spacing.md,
+                        borderTop: `1px solid ${colors.gray100}`,
+                      }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAccept(n.eventId);
+                          }}
+                          style={{
+                            padding: `${spacing.xs} ${spacing.md}`,
+                            background: colors.success,
+                            color: colors.white,
+                            border: 'none',
+                            borderRadius: borderRadius.md,
+                            fontWeight: typography.fontWeight.medium,
+                            fontSize: typography.fontSize.sm,
+                            cursor: 'pointer',
+                            transition: `all ${transitions.fast}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: spacing.xs,
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = colors.successDark}
+                          onMouseLeave={(e) => e.currentTarget.style.background = colors.success}
+                        >
+                          <span>✓</span> Принять
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDecline(n.eventId);
+                          }}
+                          style={{
+                            padding: `${spacing.xs} ${spacing.md}`,
+                            background: colors.error,
+                            color: colors.white,
+                            border: 'none',
+                            borderRadius: borderRadius.md,
+                            fontWeight: typography.fontWeight.medium,
+                            fontSize: typography.fontSize.sm,
+                            cursor: 'pointer',
+                            transition: `all ${transitions.fast}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: spacing.xs,
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = colors.errorDark}
+                          onMouseLeave={(e) => e.currentTarget.style.background = colors.error}
+                        >
+                          <span>✕</span> Отклонить
+                        </button>
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -434,6 +525,7 @@ export const NotificationsPage: React.FC = () => {
         onClose={handleCloseModal}
         onAccept={onAccept}
         onDecline={onDecline}
+        notificationType={type}
       />
     </>
   );

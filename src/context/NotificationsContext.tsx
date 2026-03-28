@@ -26,7 +26,7 @@ export interface NotificationsContextType {
   newNotificationIds: Set<string>;
   typeCounts: Record<'NewEvent' | 'EventUpdated' | 'EventDeclined', number>;
   totalNotificationsCount: number;
-  fetchEventDetails: (eventId: string) => Promise<DetailedEventDto | null>;
+  fetchEventDetails: (eventId: string, includeDeleted?: boolean) => Promise<DetailedEventDto | null>;
 }
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
@@ -60,13 +60,13 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
   
   const hasLoadedOnce = useRef(false);
 
-  const fetchEventDetails = useCallback(async (eventId: string): Promise<DetailedEventDto | null> => {
+  const fetchEventDetails = useCallback(async (eventId: string, includeDeleted: boolean = false): Promise<DetailedEventDto | null> => {
     try {
       const eventDetails: DetailedEventDto = await executeWithAuth(token => {
         if (!token) {
           throw new Error('Auth token is missing');
         }
-        return eventsClient.getEventDetails(token, eventId);
+        return eventsClient.getEventDetails(token, eventId, includeDeleted);
       });
       return eventDetails;
     } catch (err) {
@@ -81,6 +81,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         eventId: null,
         type: notifType,
         recipientStatus: 'NoReaction' as const,
+        includeDeleted: notifType === 'EventDeclined', // Добавлено: true для отмененных, false для остальных
         pageSize: 1,
         pageNumber: 1,
       } as SearchNotificationsRequest;
@@ -131,6 +132,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         eventId: null,
         type: targetType,
         recipientStatus: 'NoReaction' as const,
+        includeDeleted: targetType === 'EventDeclined', // Добавлено: true для отмененных, false для остальных
         pageSize: PAGE_SIZE,
         pageNumber: targetPage,
       } as SearchNotificationsRequest;

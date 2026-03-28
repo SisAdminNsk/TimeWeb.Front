@@ -5,6 +5,7 @@ import { ToastProvider } from './context/ToastContext';
 import { CabinetProvider } from './context/CabinetContext';
 import { FriendsProvider } from './context/FriendsContext';
 import { NotificationsProvider } from './context/NotificationsContext';
+import { EventsProvider } from './context/EventsContext';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { LayoutPage } from './pages/LayoutPage';
@@ -85,7 +86,7 @@ export const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ToastProvider> {/* <-- Добавлен ToastProvider */}
+        <ToastProvider>
           <Routes>
             <Route 
               path="/sign-in" 
@@ -108,9 +109,13 @@ export const App = () => {
               path="/" 
               element={
                 <ProtectedRoute>
-                  <NotificationsProvider>
-                    <LayoutPage />
-                  </NotificationsProvider>
+                  <EventsProvider>
+                    <NotificationsProvider>
+                      <FriendsProvider>
+                        <LayoutPage />
+                      </FriendsProvider>
+                    </NotificationsProvider>
+                  </EventsProvider>
                 </ProtectedRoute>
               }
             >
@@ -133,9 +138,7 @@ export const App = () => {
               <Route 
                 path="friends" 
                 element={
-                  <FriendsProvider>
-                    <FriendsPage />
-                  </FriendsProvider>
+                  <FriendsPage />
                 } 
               />
               <Route 

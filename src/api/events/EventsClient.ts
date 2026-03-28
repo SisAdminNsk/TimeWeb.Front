@@ -4,6 +4,9 @@ import type {
     CreateEventResponse,
     DeclieEventResponse,
     DetailedEventDto,
+    RemoveEventRequest,
+    SearchEventsRequest,
+    SearchEventsResponse,
     SearchNotificationsRequest,
     SearchNotificationsResponse
 } from './EventsContracts';
@@ -22,6 +25,34 @@ export const eventsClient = {
     return handleResponse<CreateEventResponse>(response);
   },
 
+  removeEvent: async(authToken: string, eventId: string, request: RemoveEventRequest): Promise<void> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}`, {
+      method: 'POST',
+      headers: getHeaders(authToken),
+      body: JSON.stringify(request)
+    });
+        
+    if (response.status === 403) {
+      throw new Error('У вас нет прав на удаление этого события');
+    }
+        
+    if (response.status === 404) {
+      throw new Error('Событие не найдено');
+    }
+        
+    return handleResponse<void>(response);
+    },
+
+  searchEvents: async (authToken: string, request: SearchEventsRequest): Promise<SearchEventsResponse> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/search`, {
+      method: 'POST',
+      headers: getHeaders(authToken),
+      body: JSON.stringify(request)
+    });
+    return handleResponse<SearchEventsResponse>(response);
+  },
+
+
   searchNotifications: async(authToken: string, request: SearchNotificationsRequest): Promise<SearchNotificationsResponse> => {
     const response = await fetchWithTimeout(`${apiBaseUrl}/v1/notifications/search`, {
       method: 'POST',
@@ -31,8 +62,11 @@ export const eventsClient = {
     return handleResponse<SearchNotificationsResponse>(response);
   },
 
-  getEventDetails: async(authToken: string, eventId: string): Promise<DetailedEventDto> => {
-    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}`, {
+  getEventDetails: async(authToken: string, eventId: string, includeDeleted: boolean): Promise<DetailedEventDto> => {
+    const params = new URLSearchParams({
+      includeDeleted: includeDeleted.toString()
+    });
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}?${params}`, {
       method: 'GET',
       headers: getHeaders(authToken)
     });

@@ -3,15 +3,19 @@ import { useEvents } from '../context/EventsContext';
 import { theme } from '../styles/theme';
 
 interface CalendarWidgetProps {
-  onDateSelect: (date: string) => void;
+  onDateSelect?: (date: string) => void;
   selectedDate?: string | null;
 }
 
 export const CalendarWidget: React.FC<CalendarWidgetProps> = ({ 
   onDateSelect, 
-  selectedDate 
+  selectedDate,
 }) => {
-  const { hasEventsOnDate, getEventsForDate } = useEvents();
+  const { 
+    hasEventsOnDate, 
+    getEventsForDate, 
+    isLoading,
+  } = useEvents();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -29,7 +33,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startingDay = firstDay.getDay() || 7; // Пн=1, Вс=7
+    const startingDay = firstDay.getDay() || 7;
     
     return { daysInMonth, startingDay };
   };
@@ -48,13 +52,12 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     const today = new Date();
     setCurrentMonth(today);
     
-    // Форматируем дату в YYYY-MM-DD и передаём в onDateSelect
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     const todayStr = `${year}-${month}-${day}`;
     
-    onDateSelect(todayStr);
+    onDateSelect?.(todayStr);
   };
 
   const formatDate = (day: number) => {
@@ -79,6 +82,20 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     return dateStr === selectedDate;
   };
 
+  const handleDayClick = (dateStr: string) => {
+    onDateSelect?.(dateStr);
+  };
+
+  // Подсчет всех событий на месяц
+  const getEventsCountForMonth = () => {
+    let count = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDate(day);
+      count += getEventsForDate(dateStr).length;
+    }
+    return count;
+  };
+
   const styles = {
     calendar: {
       backgroundColor: colors.white,
@@ -86,6 +103,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       boxShadow: shadows.md,
       padding: spacing.lg,
       width: '100%',
+      position: 'relative' as const,
+      overflow: 'hidden' as const,
     } as React.CSSProperties,
     
     header: {
@@ -100,6 +119,23 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       fontWeight: typography.fontWeight.semibold,
       color: colors.gray900,
       margin: 0,
+      display: 'flex',
+      alignItems: 'center',
+      gap: spacing.sm,
+    } as React.CSSProperties,
+
+    eventCounter: {
+      minWidth: '28px',
+      height: '28px',
+      padding: `0 ${spacing.xs}`,
+      backgroundColor: colors.primary,
+      color: colors.white,
+      borderRadius: borderRadius.full,
+      fontSize: typography.fontSize.xs,
+      fontWeight: typography.fontWeight.semibold,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
     } as React.CSSProperties,
     
     navButton: {
@@ -148,6 +184,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       display: 'grid',
       gridTemplateColumns: 'repeat(7, 1fr)',
       gap: spacing.xs,
+      transition: `opacity ${transitions.normal}`,
     } as React.CSSProperties,
     
     dayCell: (isCurrentMonth: boolean, isToday: boolean, isSelected: boolean): React.CSSProperties => ({
@@ -179,52 +216,101 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     
     eventIndicator: {
       position: 'absolute' as const,
-      bottom: '4px',
-      width: '6px',
-      height: '6px',
+      bottom: '6px',
+      width: '8px',
+      height: '8px',
       backgroundColor: colors.success,
       borderRadius: '50%',
+      boxShadow: `0 0 6px ${colors.success}60`,
     } as React.CSSProperties,
     
     emptyCell: {
       aspectRatio: '1',
+    } as React.CSSProperties,
+
+    loadingOverlay: {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: colors.white + '90',
+      backdropFilter: 'blur(4px)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: borderRadius.lg,
+      zIndex: 10,
+      transition: `opacity ${transitions.normal}`,
+    } as React.CSSProperties,
+
+    loadingSpinner: {
+      width: '48px',
+      height: '48px',
+      position: 'relative' as const,
+    } as React.CSSProperties,
+
+    loadingText: {
+      marginTop: spacing.md,
+      fontSize: typography.fontSize.sm,
+      color: colors.gray600,
+      fontWeight: typography.fontWeight.medium,
+    } as React.CSSProperties,
+
+    loadingDots: {
+      display: 'flex',
+      gap: '4px',
+      marginTop: spacing.sm,
+    } as React.CSSProperties,
+
+    loadingDot: {
+      width: '8px',
+      height: '8px',
+      borderRadius: '50%',
+      backgroundColor: colors.primary,
     } as React.CSSProperties,
   };
 
   const renderDays = () => {
     const days = [];
     
-    // Пустые ячейки до первого дня месяца
     for (let i = 1; i < startingDay; i++) {
       days.push(<div key={`empty-${i}`} style={styles.emptyCell} />);
     }
     
-    // Дни месяца
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDate(day);
       const hasEvents = hasEventsOnDate(dateStr);
       const dayIsToday = isToday(day);
       const dayIsSelected = isSelected(day);
+      const eventsCount = getEventsForDate(dateStr).length;
       
       days.push(
         <button
           key={day}
           style={styles.dayCell(true, dayIsToday, dayIsSelected)}
-          onClick={() => onDateSelect(dateStr)}
+          onClick={() => handleDayClick(dateStr)}
           onMouseOver={(e) => {
             if (!dayIsSelected) {
-              e.currentTarget.style.backgroundColor = colors.gray100;
+              e.currentTarget.style.backgroundColor = hasEvents ? colors.gray100 : colors.gray50;
+              e.currentTarget.style.transform = 'scale(1.05)';
             }
           }}
           onMouseOut={(e) => {
             if (!dayIsSelected) {
               e.currentTarget.style.backgroundColor = dayIsToday ? colors.primaryLight + '20' : colors.white;
+              e.currentTarget.style.transform = 'scale(1)';
             }
           }}
-          title={hasEvents ? `Событий: ${getEventsForDate(dateStr).length}` : undefined}
+          title={hasEvents 
+            ? `Событий: ${eventsCount}` 
+            : 'Нет событий'}
         >
           <span>{day}</span>
-          {hasEvents && <div style={styles.eventIndicator} />}
+          {hasEvents && (
+            <div style={styles.eventIndicator} />
+          )}
         </button>
       );
     }
@@ -234,50 +320,155 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
   return (
     <div style={styles.calendar}>
-      <div style={styles.header}>
-        <button 
-          style={styles.navButton} 
-          onClick={prevMonth}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = colors.gray200}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = colors.gray100}
-        >
-          ←
-        </button>
+      {isLoading && (
+        <div style={styles.loadingOverlay}>
+          <div style={styles.loadingSpinner}>
+            <svg viewBox="0 0 48 48" style={{ width: '100%', height: '100%' }}>
+              <circle
+                cx="24"
+                cy="24"
+                r="20"
+                fill="none"
+                stroke={colors.gray200}
+                strokeWidth="4"
+              />
+              <circle
+                cx="24"
+                cy="24"
+                r="20"
+                fill="none"
+                stroke={colors.primary}
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray="80"
+                strokeDashoffset="20"
+                className="spinner-circle"
+              />
+            </svg>
+          </div>
+          <p style={styles.loadingText}>
+            Загрузка
+            <span className="loading-dots">...</span>
+          </p>
+          <div style={styles.loadingDots}>
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.loadingDot,
+                  animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                  opacity: 0.4,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ opacity: isLoading ? 0.5 : 1, transition: `opacity ${transitions.normal}` }}>
+        <div style={styles.header}>
+          <button 
+            style={styles.navButton} 
+            onClick={prevMonth}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = colors.gray200;
+              e.currentTarget.style.transform = 'scale(1.1)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = colors.gray100;
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            disabled={isLoading}
+          >
+            ←
+          </button>
+          
+          <h3 style={styles.monthTitle}>
+            {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+            <span style={styles.eventCounter}>
+              {getEventsCountForMonth() > 99 ? '99+' : getEventsCountForMonth()}
+            </span>
+          </h3>
+          
+          <button 
+            style={styles.navButton} 
+            onClick={nextMonth}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = colors.gray200;
+              e.currentTarget.style.transform = 'scale(1.1)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = colors.gray100;
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            disabled={isLoading}
+          >
+            →
+          </button>
+        </div>
         
-        <h3 style={styles.monthTitle}>
-          {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-        </h3>
+        <div style={{ textAlign: 'center', marginBottom: spacing.md }}>
+          <button
+            style={styles.todayButton}
+            onClick={goToToday}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = colors.primaryDark;
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = colors.primary;
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            disabled={isLoading}
+          >
+            Сегодня
+          </button>
+        </div>
         
-        <button 
-          style={styles.navButton} 
-          onClick={nextMonth}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = colors.gray200}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = colors.gray100}
-        >
-          →
-        </button>
+        <div style={styles.weekDays}>
+          {dayNames.map(day => (
+            <div key={day} style={styles.weekDay}>{day}</div>
+          ))}
+        </div>
+        
+        <div style={styles.daysGrid}>
+          {renderDays()}
+        </div>
       </div>
-      
-      <div style={{ textAlign: 'center', marginBottom: spacing.md }}>
-        <button
-          style={styles.todayButton}
-          onClick={goToToday}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = colors.primaryDark}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = colors.primary}
-        >
-          Сегодня
-        </button>
-      </div>
-      
-      <div style={styles.weekDays}>
-        {dayNames.map(day => (
-          <div key={day} style={styles.weekDay}>{day}</div>
-        ))}
-      </div>
-      
-      <div style={styles.daysGrid}>
-        {renderDays()}
-      </div>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse {
+          0%, 100% { 
+            opacity: 0.4;
+            transform: scale(1);
+          }
+          50% { 
+            opacity: 1;
+            transform: scale(1.3);
+          }
+        }
+        
+        .spinner-circle {
+          animation: spin 1.2s linear infinite;
+          transform-origin: center;
+        }
+        
+        .loading-dots {
+          animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+          0%, 20% { content: ''; }
+          40% { content: '.'; }
+          60% { content: '..'; }
+          80%, 100% { content: '...'; }
+        }
+      `}</style>
     </div>
   );
 };
