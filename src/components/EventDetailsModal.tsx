@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useEvents } from '../context/EventsContext';
-import { useAuth } from '../context/AuthContext'; // ✅ Импорт контекста авторизации
+import { useAuth } from '../context/AuthContext';
 import { theme } from '../styles/theme';
 import type { DetailedEventDto } from '../api/events/EventsContracts';
+import ChatWindow from './ChatWindow';
 
 interface EventDetailsModalProps {
   isOpen: boolean;
@@ -17,10 +18,11 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 }) => {
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   const { getEventDetails } = useEvents();
-  const { user } = useAuth(); // ✅ Получаем текущего пользователя
+  const { user } = useAuth();
   
   const [eventDetails, setEventDetails] = useState<DetailedEventDto | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false); // ✅ Состояние для открытия чата
 
   useEffect(() => {
     if (isOpen && eventId) {
@@ -34,11 +36,22 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     }
   }, [isOpen, eventId, getEventDetails]);
 
+  // ✅ Сброс состояния чата при закрытии модалки
+  useEffect(() => {
+    if (!isOpen) {
+      setIsChatOpen(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen || !eventId) return null;
 
-  // ✅ Проверяем, является ли участник текущим пользователем
   const isCurrentUser = (username: string) => {
     return user && username === user.name;
+  };
+
+  // ✅ Получаем ID чата для события (может быть в eventDetails или вычисляться)
+  const getChatId = () => {
+    return "string"
   };
 
   const getStatusBadgeStyle = (status: string) => {
@@ -80,7 +93,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     }
   };
 
-  // ✅ Формируем список участников с организатором во главе
   const getParticipantsList = () => {
     if (!eventDetails) return [];
     
@@ -101,6 +113,50 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     
     return [organizer, ...otherMembers];
   };
+
+  // ✅ Проверка: пользователь является участником события
+  const isParticipant = eventDetails && (
+    eventDetails.initiator.username === user?.name ||
+    eventDetails.members?.some(m => m.username === user?.name)
+  );
+
+  // ✅ Если чат открыт - рендерим только чат
+  if (isChatOpen) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          animation: 'fadeIn 0.2s ease',
+          padding: spacing.md,
+        }}
+        onClick={onClose}
+      >
+        <div
+          style={{
+            maxWidth: '500px',
+            width: '100%',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ChatWindow
+            chatId={getChatId()}
+            accessToken={user?.accessToken || ''}
+            onClose={() => setIsChatOpen(false)}
+            currentUsername={user?.name || ''}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -281,7 +337,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-                      {/* ✅ Иконка короны для организатора */}
                       {participant.isOrganizer && (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill={colors.primary} stroke={colors.primary} strokeWidth="2">
                           <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
@@ -293,7 +348,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                         color: participant.isOrganizer ? colors.primary : colors.gray900 
                       }}>
                         {participant.username}
-                        {/* ✅ Приписка "(Вы)" для любого участника, который является текущим пользователем */}
                         {participant.isCurrentUser && (
                           <span style={{
                             marginLeft: spacing.xs,
@@ -307,7 +361,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: spacing.xs, alignItems: 'center' }}>
-                      {/* ✅ Бейдж "Организатор" для организатора */}
                       {participant.isOrganizer && (
                         <span style={{
                           padding: `${spacing.xs} ${spacing.sm}`,
@@ -320,7 +373,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                           Организатор
                         </span>
                       )}
-                      {/* ✅ Бейдж статуса для остальных участников */}
                       {!participant.isOrganizer && (
                         (() => {
                           const badge = getStatusBadgeStyle(participant.status);
@@ -345,6 +397,71 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             )}
           </div>
         </div>
+
+        {/* ✅ Кнопка перехода в чат */}
+        {isParticipant && (
+          <div style={{
+            marginBottom: spacing.lg,
+            padding: spacing.md,
+            backgroundColor: colors.primary + '10',
+            borderRadius: borderRadius.md,
+            border: `1px solid ${colors.primary}`,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: spacing.sm,
+              marginBottom: spacing.sm,
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span style={{
+                fontSize: typography.fontSize.sm,
+                fontWeight: typography.fontWeight.semibold,
+                color: colors.primary,
+              }}>
+                Групповой чат события
+              </span>
+            </div>
+            <button
+              onClick={() => setIsChatOpen(true)}
+              disabled={!user?.accessToken}
+              style={{
+                width: '100%',
+                padding: `${spacing.sm} ${spacing.md}`,
+                backgroundColor: colors.primary,
+                color: colors.white,
+                border: 'none',
+                borderRadius: borderRadius.md,
+                fontSize: typography.fontSize.sm,
+                fontWeight: typography.fontWeight.semibold,
+                cursor: user?.accessToken ? 'pointer' : 'not-allowed',
+                opacity: user?.accessToken ? 1 : 0.6,
+                transition: `all ${transitions.fast}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.sm,
+              }}
+              onMouseOver={(e) => {
+                if (user?.accessToken) {
+                  e.currentTarget.style.backgroundColor = colors.primaryDark || '#0056b3';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (user?.accessToken) {
+                  e.currentTarget.style.backgroundColor = colors.primary;
+                }
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Открыть чат
+            </button>
+          </div>
+        )}
 
         <div style={{
           display: 'flex',
