@@ -13,6 +13,7 @@ interface Message {
   id: string;
   chatId: string;
   senderId: string;
+  username: string;  // ✅ Добавлено поле username
   content: string;
   createdAt: string;
   isRead: boolean;
@@ -230,34 +231,53 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     <div
                       style={{
                         maxWidth: '70%',
-                        padding: `${spacing.sm} ${spacing.md}`,
-                        backgroundColor: isOwnMessage ? colors.primary : colors.white,
-                        color: isOwnMessage ? colors.white : colors.gray900,
-                        borderRadius: borderRadius.lg,
-                        borderBottomRightRadius: isOwnMessage ? borderRadius.sm : borderRadius.lg,
-                        borderBottomLeftRadius: isOwnMessage ? borderRadius.lg : borderRadius.sm,
-                        boxShadow: shadows.sm,
                       }}
                     >
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: typography.fontSize.sm,
-                          lineHeight: 1.4,
-                          wordBreak: 'break-word' as const,
-                        }}
-                      >
-                        {message.content}
-                      </p>
+                      {/* ✅ Отображение имени отправителя для чужих сообщений */}
+                      {!isOwnMessage && (
+                        <div
+                          style={{
+                            fontSize: typography.fontSize.xs,
+                            color: colors.gray600,
+                            marginBottom: spacing.xs,
+                            marginLeft: spacing.sm,
+                            fontWeight: typography.fontWeight.medium,
+                          }}
+                        >
+                          {message.username}
+                        </div>
+                      )}
                       <div
                         style={{
-                          textAlign: 'right',
-                          marginTop: spacing.xs,
-                          fontSize: typography.fontSize.xs,
-                          opacity: 0.7,
+                          padding: `${spacing.sm} ${spacing.md}`,
+                          backgroundColor: isOwnMessage ? colors.primary : colors.white,
+                          color: isOwnMessage ? colors.white : colors.gray900,
+                          borderRadius: borderRadius.lg,
+                          borderBottomRightRadius: isOwnMessage ? borderRadius.sm : borderRadius.lg,
+                          borderBottomLeftRadius: isOwnMessage ? borderRadius.lg : borderRadius.sm,
+                          boxShadow: shadows.sm,
                         }}
                       >
-                        {formatTime(message.createdAt)}
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: typography.fontSize.sm,
+                            lineHeight: 1.4,
+                            wordBreak: 'break-word' as const,
+                          }}
+                        >
+                          {message.content}
+                        </p>
+                        <div
+                          style={{
+                            textAlign: 'right',
+                            marginTop: spacing.xs,
+                            fontSize: typography.fontSize.xs,
+                            opacity: 0.7,
+                          }}
+                        >
+                          {formatTime(message.createdAt)}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -6,6 +6,7 @@ interface Message {
   id: string;
   chatId: string;
   senderId: string;
+  username: string;  // ✅ Добавлено поле username
   content: string;
   createdAt: string;
   isRead: boolean;
