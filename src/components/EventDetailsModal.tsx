@@ -149,7 +149,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         >
           <ChatWindow
             chatId={getChatId()}
-            accessToken={user?.accessToken || ''}
             onClose={() => setIsChatOpen(false)}
             currentUsername={user?.name || ''}
           />

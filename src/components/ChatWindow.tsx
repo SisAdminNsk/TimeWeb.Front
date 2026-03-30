@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+// ChatWindow.tsx
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { useChatHub } from '../hooks/UseChatHub';
 import { theme } from '../styles/theme';
 
 interface ChatWindowProps {
   chatId: string;
-  accessToken: string;
   onClose: () => void;
   currentUsername: string;
 }
@@ -13,23 +13,43 @@ interface Message {
   id: string;
   chatId: string;
   senderId: string;
-  username: string;  // ✅ Добавлено поле username
+  username: string;
   content: string;
   createdAt: string;
   isRead: boolean;
 }
 
+interface DateSeparator {
+  type: 'separator';
+  date: string;
+  id: string;
+}
+
+type ChatListItem = DateSeparator | Message;
+
+const SCROLL_THRESHOLD = 100;
+const SCROLL_OFFSET_FOR_NOTIFICATION = 300;
+
 const ChatWindow: React.FC<ChatWindowProps> = ({
   chatId,
-  accessToken,
   onClose,
   currentUsername,
 }) => {
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showNewMessageNotification, setShowNewMessageNotification] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollLockRef = useRef<boolean>(false);
+  
+  const isInitialLoad = useRef<boolean>(true);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const previousMessagesLengthRef = useRef<number>(0);
+  const previousScrollHeightRef = useRef<number>(0);
+
   const {
     isConnected,
     messages,
@@ -37,306 +57,253 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     joinChat,
     leaveChat,
     error,
-  } = useChatHub(accessToken);
+    isLoadingHistory,
+    hasMoreHistory,
+    loadMoreHistory,
+  } = useChatHub();
 
-  // Подключение к чату при монтировании
   useEffect(() => {
-    joinChat(chatId).catch((err) => {
-      console.error('Failed to join chat:', err);
-    });
-
+    joinChat(chatId).catch(console.error);
     return () => {
       leaveChat(chatId).catch(console.error);
     };
   }, [chatId, joinChat, leaveChat]);
 
-  // Автопрокрутка к последнему сообщению
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // СИНХРОННАЯ КОРРЕКТИРОВКА СКРОЛЛА (Чтобы не было прыжков при подгрузке вверх)
+  useLayoutEffect(() => {
+    if (scrollLockRef.current && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      const heightDiff = container.scrollHeight - previousScrollHeightRef.current;
+      if (heightDiff > 0) {
+        container.scrollTop += heightDiff;
+      }
+      scrollLockRef.current = false;
+    }
   }, [messages]);
+
+  // АВТОСКРОЛЛ ВНИЗ И УВЕДОМЛЕНИЯ
+  useEffect(() => {
+    if (!messagesContainerRef.current || messages.length === 0) return;
+    
+    const container = messagesContainerRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_OFFSET_FOR_NOTIFICATION;
+    
+    if (messages.length > previousMessagesLengthRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.id !== lastMessageIdRef.current) {
+        lastMessageIdRef.current = lastMessage.id;
+        
+        if (isNearBottom || isInitialLoad.current) {
+          messagesEndRef.current?.scrollIntoView({ behavior: isInitialLoad.current ? 'auto' : 'smooth' });
+          setShowNewMessageNotification(false);
+          setNewMessageCount(0);
+        } else {
+          setShowNewMessageNotification(true);
+          setNewMessageCount(prev => prev + 1);
+        }
+      }
+    }
+    
+    if (isInitialLoad.current && messages.length > 0) {
+      isInitialLoad.current = false;
+    }
+    previousMessagesLengthRef.current = messages.length;
+  }, [messages]);
+
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container || scrollLockRef.current || isLoadingHistory) return;
+
+    // Триггер подгрузки старых сообщений
+    if (container.scrollTop < SCROLL_THRESHOLD && hasMoreHistory) {
+      scrollLockRef.current = true;
+      previousScrollHeightRef.current = container.scrollHeight;
+      loadMoreHistory();
+    }
+    
+    // Убираем уведомление, если пользователь сам доскроллил вниз
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_OFFSET_FOR_NOTIFICATION;
+    if (isNearBottom) {
+      setShowNewMessageNotification(false);
+      setNewMessageCount(0);
+    }
+  }, [hasMoreHistory, isLoadingHistory, loadMoreHistory]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!messageInput.trim() || isSending || !isConnected) {
-      return;
-    }
+    if (!messageInput.trim() || isSending || !isConnected) return;
 
     setIsSending(true);
     try {
       await sendMessage(messageInput.trim());
       setMessageInput('');
+      // Принудительный скролл вниз после отправки
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (err) {
-      console.error('Failed to send message:', err);
+      console.error(err);
     } finally {
       setIsSending(false);
     }
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatRelativeDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Сегодня';
-    if (diffDays === 1) return 'Вчера';
-    if (diffDays < 7) return `${diffDays} дн. назад`;
-    return date.toLocaleDateString('ru-RU');
-  };
-
-  // Группировка сообщений по датам
-  const groupedMessages = messages.reduce((acc, message) => {
-    const dateKey = formatRelativeDate(message.createdAt);
-    if (!acc[dateKey]) {
-      acc[dateKey] = [];
+  const messagesWithSeparators: ChatListItem[] = messages.reduce((acc, msg, idx) => {
+    const date = msg.createdAt.split('T')[0];
+    const prevDate = idx > 0 ? messages[idx - 1].createdAt.split('T')[0] : null;
+    if (date !== prevDate) {
+      acc.push({ type: 'separator', date: msg.createdAt, id: `sep-${date}` });
     }
-    acc[dateKey].push(message);
+    acc.push(msg);
     return acc;
-  }, {} as Record<string, Message[]>);
+  }, [] as ChatListItem[]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '500px',
-        backgroundColor: colors.white,
-        borderRadius: borderRadius.lg,
-        boxShadow: shadows.lg,
-        overflow: 'hidden',
-      }}
-    >
-      {/* Заголовок чата */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: spacing.md,
-          backgroundColor: colors.primary,
-          color: colors.white,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-          <div
-            style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              backgroundColor: isConnected ? colors.success : colors.error,
-              animation: isConnected ? 'pulse 2s infinite' : 'none',
-            }}
-          />
-          <span style={{ fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.semibold }}>
-            Групповой чат
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            color: colors.white,
-            fontSize: typography.fontSize.lg,
-            padding: spacing.xs,
-            transition: `all ${transitions.fast}`,
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.opacity = '0.7')}
-          onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
-        >
-          ✕
-        </button>
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100vh', // Занимает всю высоту родителя или экрана
+      maxHeight: '100%', // Не дает выходить за границы
+      backgroundColor: colors.white, 
+      borderRadius: borderRadius.lg, 
+      boxShadow: shadows.lg, 
+      overflow: 'hidden', 
+      position: 'relative' 
+    }}>
+      
+      {/* HEADER (Фиксированная высота) */}
+      <div style={{ 
+        padding: spacing.md, 
+        borderBottom: `1px solid ${colors.gray200}`, 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        background: colors.white,
+        zIndex: 2
+      }}>
+        <h3 style={{ margin: 0, fontFamily: typography.fontFamily, fontSize: typography.fontSize.lg }}>Чат</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: colors.gray400 }}>×</button>
       </div>
 
-      {/* Статус подключения */}
-      {!isConnected && (
-        <div
-          style={{
-            padding: spacing.sm,
-            backgroundColor: colors.warningLight,
-            color: colors.warningDark,
-            fontSize: typography.fontSize.xs,
-            textAlign: 'center',
-          }}
-        >
-          Подключение к чату...
-        </div>
-      )}
-
-      {/* Ошибка */}
-      {error && (
-        <div
-          style={{
-            padding: spacing.sm,
-            backgroundColor: colors.errorLight,
-            color: colors.errorDark,
-            fontSize: typography.fontSize.xs,
-            textAlign: 'center',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {/* Сообщения */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: spacing.md,
-          backgroundColor: colors.gray50,
+      {/* MESSAGES AREA (Занимает всё свободное место, скроллится только здесь) */}
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        style={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          padding: spacing.md, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: spacing.sm, 
+          background: colors.gray50 
         }}
       >
-        {messages.length === 0 ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: spacing.xl,
-              color: colors.gray400,
-              fontSize: typography.fontSize.sm,
-            }}
-          >
-            Сообщений пока нет. Будьте первым!
+        {isLoadingHistory && (
+          <div style={{ textAlign: 'center', fontSize: '12px', color: colors.gray400, padding: '10px' }}>
+            Загрузка истории...
           </div>
-        ) : (
-          Object.entries(groupedMessages).map(([dateKey, dateMessages]) => (
-            <div key={dateKey}>
-              <div
-                style={{
-                  textAlign: 'center',
-                  margin: `${spacing.md} 0`,
-                  fontSize: typography.fontSize.xs,
-                  color: colors.gray400,
-                }}
-              >
-                {dateKey}
-              </div>
-              {dateMessages.map((message) => {
-                const isOwnMessage = message.senderId === currentUsername;
-                return (
-                  <div
-                    key={message.id}
-                    style={{
-                      display: 'flex',
-                      justifyContent: isOwnMessage ? 'flex-end' : 'flex-start',
-                      marginBottom: spacing.sm,
-                    }}
-                  >
-                    <div
-                      style={{
-                        maxWidth: '70%',
-                      }}
-                    >
-                      {/* ✅ Отображение имени отправителя для чужих сообщений */}
-                      {!isOwnMessage && (
-                        <div
-                          style={{
-                            fontSize: typography.fontSize.xs,
-                            color: colors.gray600,
-                            marginBottom: spacing.xs,
-                            marginLeft: spacing.sm,
-                            fontWeight: typography.fontWeight.medium,
-                          }}
-                        >
-                          {message.username}
-                        </div>
-                      )}
-                      <div
-                        style={{
-                          padding: `${spacing.sm} ${spacing.md}`,
-                          backgroundColor: isOwnMessage ? colors.primary : colors.white,
-                          color: isOwnMessage ? colors.white : colors.gray900,
-                          borderRadius: borderRadius.lg,
-                          borderBottomRightRadius: isOwnMessage ? borderRadius.sm : borderRadius.lg,
-                          borderBottomLeftRadius: isOwnMessage ? borderRadius.lg : borderRadius.sm,
-                          boxShadow: shadows.sm,
-                        }}
-                      >
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: typography.fontSize.sm,
-                            lineHeight: 1.4,
-                            wordBreak: 'break-word' as const,
-                          }}
-                        >
-                          {message.content}
-                        </p>
-                        <div
-                          style={{
-                            textAlign: 'right',
-                            marginTop: spacing.xs,
-                            fontSize: typography.fontSize.xs,
-                            opacity: 0.7,
-                          }}
-                        >
-                          {formatTime(message.createdAt)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))
         )}
-        <div ref={messagesEndRef} />
+        
+        {messagesWithSeparators.map((item) => {
+          if ('type' in item) return (
+            <div key={item.id} style={{ textAlign: 'center', margin: '15px 0' }}>
+              <span style={{ fontSize: '12px', color: colors.gray500, background: colors.gray200, padding: '2px 10px', borderRadius: '10px' }}>
+                {new Date(item.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+              </span>
+            </div>
+          );
+
+          const isMine = item.username === currentUsername;
+          return (
+            <div key={item.id} style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: isMine ? 'flex-end' : 'flex-start',
+              animation: 'fadeIn 0.2s ease-out'
+            }}>
+              {!isMine && <span style={{ fontSize: '11px', color: colors.gray500, marginLeft: '5px' }}>{item.username}</span>}
+              <div style={{ 
+                padding: '8px 12px', 
+                borderRadius: '12px', 
+                backgroundColor: isMine ? colors.primary : colors.white,
+                color: isMine ? colors.white : colors.gray800,
+                boxShadow: shadows.sm,
+                maxWidth: '85%',
+                border: isMine ? 'none' : `1px solid ${colors.gray200}`
+              }}>
+                <div style={{ fontSize: '14px', lineHeight: '1.4', wordBreak: 'break-word' }}>{item.content}</div>
+                <div style={{ fontSize: '10px', opacity: 0.7, textAlign: 'right', marginTop: '2px' }}>
+                  {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} style={{ height: '1px' }} />
       </div>
 
-      {/* Форма отправки */}
-      <form
-        onSubmit={handleSendMessage}
-        style={{
-          display: 'flex',
-          gap: spacing.sm,
-          padding: spacing.md,
-          backgroundColor: colors.white,
-          borderTop: `1px solid ${colors.gray200}`,
+      {/* КНОПКА "ВНИЗ" (Абсолютное позиционирование поверх сообщений) */}
+      {showNewMessageNotification && (
+        <div 
+          onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+          style={{ 
+            position: 'absolute', 
+            bottom: '90px', 
+            left: '50%', 
+            transform: 'translateX(-50%)', 
+            backgroundColor: colors.primary, 
+            color: 'white', 
+            padding: '8px 16px', 
+            borderRadius: '20px', 
+            cursor: 'pointer', 
+            fontSize: '13px', 
+            boxShadow: shadows.lg, 
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          Новые сообщения ({newMessageCount}) ↓
+        </div>
+      )}
+
+      {/* INPUT AREA (Фиксированная высота, прижата к низу) */}
+      <form 
+        onSubmit={handleSendMessage} 
+        style={{ 
+          padding: spacing.md, 
+          borderTop: `1px solid ${colors.gray200}`, 
+          display: 'flex', 
+          gap: spacing.sm, 
+          background: colors.white,
+          zIndex: 2
         }}
       >
         <input
-          type="text"
           value={messageInput}
           onChange={(e) => setMessageInput(e.target.value)}
-          placeholder="Введите сообщение..."
-          disabled={!isConnected || isSending}
-          style={{
-            flex: 1,
-            padding: `${spacing.sm} ${spacing.md}`,
-            border: `1px solid ${colors.gray300}`,
-            borderRadius: borderRadius.full,
-            fontSize: typography.fontSize.sm,
+          placeholder="Напишите сообщение..."
+          style={{ 
+            flex: 1, 
+            padding: '12px', 
+            borderRadius: borderRadius.md, 
+            border: `1px solid ${colors.gray300}`, 
             outline: 'none',
-            transition: `all ${transitions.fast}`,
+            fontSize: '14px'
           }}
-          onFocus={(e) => (e.target.style.borderColor = colors.primary)}
-          onBlur={(e) => (e.target.style.borderColor = colors.gray300)}
         />
-        <button
-          type="submit"
+        <button 
+          type="submit" 
           disabled={!messageInput.trim() || isSending || !isConnected}
-          style={{
-            padding: `${spacing.sm} ${spacing.lg}`,
-            backgroundColor:
-              !messageInput.trim() || isSending || !isConnected
-                ? colors.gray300
-                : colors.primary,
-            color: colors.white,
-            border: 'none',
-            borderRadius: borderRadius.full,
-            fontSize: typography.fontSize.sm,
-            fontWeight: typography.fontWeight.semibold,
-            cursor:
-              !messageInput.trim() || isSending || !isConnected
-                ? 'not-allowed'
-                : 'pointer',
-            transition: `all ${transitions.fast}`,
+          style={{ 
+            padding: '0 20px', 
+            backgroundColor: colors.primary, 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: borderRadius.md, 
+            cursor: 'pointer',
+            fontWeight: '600',
+            opacity: (!messageInput.trim() || isSending) ? 0.6 : 1
           }}
         >
           {isSending ? '...' : 'Отправить'}
@@ -344,9 +311,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       </form>
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(5px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
