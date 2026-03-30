@@ -1,9 +1,9 @@
-// UseChatHub.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as signalR from '@microsoft/signalr';
 import { useAuth } from '../context/AuthContext';
-import { getIdFromJwt } from '../common/JwtHelper';
 import { chatsClient } from '../api/chats/ChatsClient';
+import { usersClient } from '../api/users/UsersClient';
+import { config } from '../config/env';
 
 export interface Message {
   id: string;
@@ -31,8 +31,21 @@ interface UseChatHubResult {
 const MESSAGES_PER_PAGE = 200;
 const MAX_MESSAGES = 5000;
 
+const chatsApiUrl = config.chatsApiUrl;
+
+const isUnauthorizedError = (err: unknown): boolean => {
+  if (!err) return false;
+  const e = err as any;
+  return (
+    e?.statusCode === 401 ||
+    e?.message?.includes('401') ||
+    e?.message?.includes('Unauthorized') ||
+    (e?.name === 'HttpError' && e?.statusCode === 401)
+  );
+};
+
 export const useChatHub = (): UseChatHubResult => {
-  const { getToken } = useAuth();
+  const { getToken, handleUnauthorized } = useAuth();
 
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -41,7 +54,7 @@ export const useChatHub = (): UseChatHubResult => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
 
-  const connectionRef = useRef<signalR.HubConnection | null>(null); // ← NEW: always up-to-date
+  const connectionRef = useRef<signalR.HubConnection | null>(null);
   const currentChatId = useRef<string | null>(null);
 
   const currentPageRef = useRef<number>(1);
@@ -52,7 +65,15 @@ export const useChatHub = (): UseChatHubResult => {
   // ──────────────────────────────────────────────
   const createConnection = useCallback((): signalR.HubConnection => {
     const newConnection = new signalR.HubConnectionBuilder()
-      .withUrl('http://localhost:5003/chat')
+      .withUrl(`${chatsApiUrl}/chat`, {
+        accessTokenFactory: () => {
+          try {
+            return getToken();
+          } catch {
+            return '';
+          }
+        },
+      })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(signalR.LogLevel.Warning)
       .build();
@@ -74,9 +95,7 @@ export const useChatHub = (): UseChatHubResult => {
       setIsConnected(true);
       if (currentChatId.current) {
         try {
-          const token = getToken();
-          const userId = getIdFromJwt(token);
-          await newConnection.invoke('JoinChat', currentChatId.current, userId);
+          await newConnection.invoke('JoinChat', currentChatId.current);
         } catch (err) {
           console.error('Failed to rejoin chat after reconnect:', err);
         }
@@ -109,22 +128,55 @@ export const useChatHub = (): UseChatHubResult => {
   }, [getToken]);
 
   // ──────────────────────────────────────────────
+  const startConnectionWithRefresh = useCallback(async (conn: signalR.HubConnection) => {
+    if (conn.state === signalR.HubConnectionState.Connected) return;
+
+    try {
+      await conn.start();
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        console.warn('SignalR connection → 401, trying refresh token...');
+
+        const sessionStr = localStorage.getItem('user_session');
+        if (!sessionStr) throw err;
+
+        const session = JSON.parse(sessionStr);
+        if (!session?.refreshToken) throw err;
+
+        try {
+          const refreshResponse = await usersClient.refresh({ token: session.refreshToken });
+          const newSession = {
+            ...session,
+            accessToken: refreshResponse.accessToken,
+            refreshToken: refreshResponse.refreshToken,
+          };
+          localStorage.setItem('user_session', JSON.stringify(newSession));
+
+          await conn.start();
+          console.log('SignalR reconnected with refreshed token');
+          return;
+        } catch (refreshErr) {
+          console.error('Refresh token failed during SignalR connect:', refreshErr);
+          handleUnauthorized({ statusCode: 401 } as any);
+          throw refreshErr;
+        }
+      }
+      throw err;
+    }
+  }, [handleUnauthorized]);
+
+  // ──────────────────────────────────────────────
   const joinChat = useCallback(async (chatId: string) => {
     const conn = connectionRef.current;
     if (!conn) throw new Error('Connection not initialized');
-
-    const token = getToken();
-    const userId = getIdFromJwt(token);
 
     try {
       setError(null);
       currentChatId.current = chatId;
 
-      if (conn.state !== signalR.HubConnectionState.Connected) {
-        await conn.start();
-      }
+      await startConnectionWithRefresh(conn);
 
-      await conn.invoke('JoinChat', chatId, userId);
+      await conn.invoke('JoinChat', chatId);
 
       setIsConnected(true);
       setMessages([]);
@@ -160,46 +212,23 @@ export const useChatHub = (): UseChatHubResult => {
       setError(err instanceof Error ? err.message : 'Failed to join chat');
       throw err;
     }
-  }, [getToken, loadMessagesPage]);
+  }, [startConnectionWithRefresh, loadMessagesPage]);
 
   // ──────────────────────────────────────────────
-  const loadMoreHistory = useCallback(async () => {
-    if (!currentChatId.current || isLoadingHistory || !hasMoreHistory) return;
+  const sendMessage = useCallback(async (content: string): Promise<void> => {
+    const conn = connectionRef.current;
+    if (!conn || !currentChatId.current) throw new Error('Not connected to chat');
 
-    const nextPage = currentPageRef.current + 1;
-    if (loadedPagesRef.current.has(nextPage) || nextPage > totalPagesRef.current) {
-      setHasMoreHistory(false);
-      return;
-    }
+    const token = getToken();
 
-    setIsLoadingHistory(true);
     try {
-      const { messages: olderMessages } = await loadMessagesPage(currentChatId.current, nextPage);
-      if (olderMessages.length === 0) {
-        setHasMoreHistory(false);
-        return;
-      }
-
-      loadedPagesRef.current.add(nextPage);
-      currentPageRef.current = nextPage;
-
-      setMessages(prev => {
-        const newIds = new Set(olderMessages.map(m => m.id));
-        const filteredPrev = prev.filter(m => !newIds.has(m.id));
-        const combined = [...olderMessages, ...filteredPrev];
-        const sorted = combined.sort(
-          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-        return sorted.length > MAX_MESSAGES ? sorted.slice(0, MAX_MESSAGES) : sorted;
-      });
-
-      setHasMoreHistory(nextPage < totalPagesRef.current);
-    } catch (err) {
-      console.error('Failed to load more history:', err);
-    } finally {
-      setIsLoadingHistory(false);
+      await conn.invoke('SendMessage', currentChatId.current, token, content);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send message';
+      setError(msg);
+      throw err;
     }
-  }, [isLoadingHistory, hasMoreHistory, loadMessagesPage]);
+  }, [getToken]);
 
   // ──────────────────────────────────────────────
   const leaveChat = useCallback(async (chatId: string) => {
@@ -220,21 +249,53 @@ export const useChatHub = (): UseChatHubResult => {
   }, []);
 
   // ──────────────────────────────────────────────
-  const sendMessage = useCallback(async (content: string): Promise<void> => {
-    const conn = connectionRef.current;
-    if (!conn || !currentChatId.current) throw new Error('Not connected to chat');
+  // ИСПРАВЛЕННЫЙ loadMoreHistory (главный фикс прыжка)
+  const loadMoreHistory = useCallback(async () => {
+    if (!currentChatId.current || isLoadingHistory || !hasMoreHistory) return;
 
-    const token = getToken();
-    const userId = getIdFromJwt(token);
-
-    try {
-      await conn.invoke('SendMessage', currentChatId.current, userId, token, content);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send message';
-      setError(msg);
-      throw err;
+    const nextPage = currentPageRef.current + 1;
+    if (loadedPagesRef.current.has(nextPage) || nextPage > totalPagesRef.current) {
+      setHasMoreHistory(false);
+      return;
     }
-  }, [getToken]);
+
+    setIsLoadingHistory(true);
+    try {
+      const { messages: olderMessages } = await loadMessagesPage(
+        currentChatId.current,
+        nextPage
+      );
+
+      if (olderMessages.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+
+      loadedPagesRef.current.add(nextPage);
+      currentPageRef.current = nextPage;
+
+      setMessages((prev) => {
+        const newIds = new Set(olderMessages.map((m) => m.id));
+        const filteredPrev = prev.filter((m) => !newIds.has(m.id));
+
+        const combined = [...olderMessages, ...filteredPrev];
+        const sorted = combined.sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
+        // ← ИСПРАВЛЕНИЕ: оставляем САМЫЕ НОВЫЕ сообщения
+        return sorted.length > MAX_MESSAGES
+          ? sorted.slice(sorted.length - MAX_MESSAGES)
+          : sorted;
+      });
+
+      setHasMoreHistory(nextPage < totalPagesRef.current);
+    } catch (err) {
+      console.error('Failed to load more history:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [isLoadingHistory, hasMoreHistory, loadMessagesPage]);
 
   // ──────────────────────────────────────────────
   const reconnect = useCallback(async () => {
@@ -243,30 +304,31 @@ export const useChatHub = (): UseChatHubResult => {
 
     const newConnection = createConnection();
     connectionRef.current = newConnection;
-    await newConnection.start();
-
     setConnection(newConnection);
-    setIsConnected(true);
 
-    if (currentChatId.current) {
-      const token = getToken();
-      const userId = getIdFromJwt(token);
-      await newConnection.invoke('JoinChat', currentChatId.current, userId);
+    try {
+      await startConnectionWithRefresh(newConnection);
+
+      setIsConnected(true);
+
+      if (currentChatId.current) {
+        await newConnection.invoke('JoinChat', currentChatId.current);
+      }
+    } catch (err) {
+      console.error('Reconnect failed:', err);
     }
-  }, [createConnection, getToken]);
+  }, [createConnection, startConnectionWithRefresh]);
 
   // ──────────────────────────────────────────────
   useEffect(() => {
     const newConnection = createConnection();
-
     connectionRef.current = newConnection;
     setConnection(newConnection);
-    // ← Connection is now available immediately (no race)
 
     return () => {
       newConnection.stop().catch(console.error);
     };
-  }, [createConnection, getToken]);
+  }, [createConnection]);
 
   return {
     isConnected,

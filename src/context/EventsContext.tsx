@@ -7,7 +7,8 @@ import type {
   DetailedEventDto, 
   SearchEventsRequest,
   EventDto as ApiEventDto,
-  RemoveEventRequest
+  RemoveEventRequest,
+  CreateEventRequest
 } from '../api/events/EventsContracts';
 import { getIdFromJwt } from '../common/JwtHelper';
 
@@ -20,7 +21,9 @@ export interface CalendarEvent {
   endTime: string; // HH:mm
   friendIds: string[];
   createdAt: string;
-  isInitiator?: boolean; // Флаг: пользователь является организатором
+  isInitiator?: boolean;
+  needChat?: boolean; // Флаг: нужен ли чат для этого события
+  chatId?: string | null; // ID чата (может быть null)
 }
 
 interface Notification {
@@ -30,14 +33,14 @@ interface Notification {
 
 interface EventsContextType {
   events: CalendarEvent[];
-  initiatorEvents: CalendarEvent[]; // События где пользователь - организатор
+  initiatorEvents: CalendarEvent[];
   selectedDate: string | null;
   isLoading: boolean;
   isDetailsLoading: boolean;
   notification: Notification | null;
   selectedEvent: DetailedEventDto | null;
   
-  addEvent: (event: Omit<CalendarEvent, 'id' | 'createdAt'>) => Promise<void>;
+  addEvent: (event: Omit<CalendarEvent, 'id' | 'createdAt'> & { needChat?: boolean }) => Promise<void>;
   deleteEvent: (eventId: string, deletedReason?: string | null) => Promise<void>;
   updateEvent: (event: CalendarEvent) => Promise<void>;
   selectDate: (date: string | null) => void;
@@ -46,7 +49,6 @@ interface EventsContextType {
   isEventInitiator: (eventId: string) => boolean;
   clearNotification: () => void;
   
-  // Новые методы для API
   fetchEventsForMonth: (year: number, month: number) => Promise<void>;
   fetchInitiatorEventsForMonth: (year: number, month: number) => Promise<void>;
   getEventDetails: (eventId: string, includeDeleted?: boolean) => Promise<DetailedEventDto | null>;
@@ -73,10 +75,11 @@ const convertApiEventToCalendarEvent = (
     friendIds: apiEvent.members?.map(m => m.id) || [],
     createdAt: apiEvent.createdAt,
     isInitiator,
+    chatId: apiEvent.chatId ?? null,
+    needChat: apiEvent.chatId !== null,
   };
 };
 
-// Вспомогательная функция для получения userId из токена
 const getUserIdFromToken = (accessToken: string | null | undefined): string | null => {
   if (!accessToken) return null;
   try {
@@ -98,10 +101,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const [selectedEvent, setSelectedEventState] = useState<DetailedEventDto | null>(null);
   const [refetchTrigger, setRefetchTrigger] = useState<number>(0);
 
-  // Получаем userId из токена пользователя
   const userId = user ? getUserIdFromToken(user.accessToken) : null;
 
-  // Авто-загрузка событий при монтировании или изменении refetchTrigger
   useEffect(() => {
     if (userId) {
       const now = new Date();
@@ -116,7 +117,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     setTimeout(() => setNotification(null), 5000);
   }, []);
 
-  // Загрузка событий где пользователь - участник
   const fetchEventsForMonth = useCallback(async (year: number, month: number) => {
     if (!userId) return;
     
@@ -150,7 +150,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [userId, executeWithAuth, showNotification]);
 
-  // Загрузка событий где пользователь - организатор (без memberId)
   const fetchInitiatorEventsForMonth = useCallback(async (year: number, month: number) => {
     if (!userId) return;
     
@@ -177,11 +176,9 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       setInitiatorEvents(convertedEvents);
     } catch (err) {
       console.error('Failed to fetch initiator events from API:', err);
-      // Не показываем ошибку пользователю, так как это дополнительная информация
     }
   }, [userId, executeWithAuth, showNotification]);
 
-  // Загрузка всех событий (участник + организатор)
   const fetchAllEventsForMonth = useCallback(async (year: number, month: number) => {
     await Promise.all([
       fetchEventsForMonth(year, month),
@@ -189,7 +186,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     ]);
   }, [fetchEventsForMonth, fetchInitiatorEventsForMonth]);
 
-  // Получение деталей события
   const getEventDetails = useCallback(async (eventId: string, includeDeleted: boolean = false): Promise<DetailedEventDto | null> => {
     setIsDetailsLoading(true);
     try {
@@ -207,31 +203,49 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [executeWithAuth, showNotification]);
 
-  const addEvent = useCallback(async (eventData: Omit<CalendarEvent, 'id' | 'createdAt'>) => {
+  // 🆕 ОБНОВЛЁННАЯ ФУНКЦИЯ: Создание события с флагом needChat
+  const addEvent = useCallback(async (eventData: Omit<CalendarEvent, 'id' | 'createdAt'> & { needChat?: boolean }) => {
     setIsLoading(true);
+    
     try {
-      const createEventReq = {
+      // 🆕 Передаём флаг needChat в API запрос
+      const createEventReq: CreateEventRequest = {
         title: eventData.title,
         description: eventData.description,
         startAt: `${eventData.date}T${eventData.startTime}`,
         endAt: `${eventData.date}T${eventData.endTime}`,
         memberIds: eventData.friendIds,
+        needChat: eventData.needChat ?? false,
       };
+      
       const response = await executeWithAuth(token =>
         eventsClient.createEvent(token, createEventReq)
       );
+      
+      // 🆕 Сохраняем chatId из ответа (если чат был создан)
       const newEvent: CalendarEvent = {
         ...eventData,
         id: response.eventId,
         createdAt: new Date().toISOString(),
-        isInitiator: true, // Пользователь создал событие
+        isInitiator: true,
+        chatId: response.chatId ?? null,
+        needChat: eventData.needChat ?? false,
       };
+      
       setEvents(prev => [...prev, newEvent]);
       setInitiatorEvents(prev => [...prev, newEvent]);
       
       // Перезагружаем события месяца
       const eventDate = new Date(eventData.date);
       await fetchAllEventsForMonth(eventDate.getFullYear(), eventDate.getMonth());
+      
+      // 🆕 Показываем разное уведомление в зависимости от наличия чата
+      if (eventData.needChat && response.chatId) {
+        showNotification('success', 'Встреча и чат созданы');
+      } else {
+        showNotification('success', 'Встреча создана');
+      }
+      
     } catch (err) {
       showNotification('error', 'Ошибка при добавлении события');
       throw err;
@@ -276,21 +290,9 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [initiatorEvents, executeWithAuth, selectedEvent, showNotification, fetchAllEventsForMonth]);
 
-  // ЗАГЛУШКА: Обновление события (пока только локально)
   const updateEvent = useCallback(async (eventData: CalendarEvent) => {
     setIsLoading(true);
     try {
-      // TODO: Добавить API вызов когда будет готов
-      // const updateEventReq = {
-      //   title: eventData.title,
-      //   description: eventData.description,
-      //   startAt: `${eventData.date}T${eventData.startTime}`,
-      //   endAt: `${eventData.date}T${eventData.endTime}`,
-      //   memberIds: eventData.friendIds,
-      // };
-      // await executeWithAuth(token => eventsClient.updateEvent(token, eventData.id, updateEventReq));
-      
-      // Пока только обновляем в локальном состоянии
       setEvents(prev => prev.map(e => e.id === eventData.id ? eventData : e));
       setInitiatorEvents(prev => prev.map(e => e.id === eventData.id ? eventData : e));
       showNotification('info', 'Обновление события временно недоступно (заглушка)');
@@ -306,9 +308,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     setSelectedDate(date);
   }, []);
 
-  // Объединяем события участника и организатора
   const getAllEvents = useCallback(() => {
-    // Используем Map для избежания дубликатов по ID
     const eventsMap = new Map<string, CalendarEvent>();
     
     events.forEach(event => eventsMap.set(event.id, event));
@@ -325,7 +325,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     return getAllEvents().some(event => event.date === date);
   }, [getAllEvents]);
 
-  // Проверка является ли пользователь организатором события
   const isEventInitiator = useCallback((eventId: string) => {
     return initiatorEvents.some(event => event.id === eventId);
   }, [initiatorEvents]);

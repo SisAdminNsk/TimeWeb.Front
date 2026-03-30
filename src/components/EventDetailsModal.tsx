@@ -22,7 +22,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   
   const [eventDetails, setEventDetails] = useState<DetailedEventDto | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false); // ✅ Состояние для открытия чата
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen && eventId) {
@@ -36,7 +36,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     }
   }, [isOpen, eventId, getEventDetails]);
 
-  // ✅ Сброс состояния чата при закрытии модалки
   useEffect(() => {
     if (!isOpen) {
       setIsChatOpen(false);
@@ -49,9 +48,9 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     return user && username === user.name;
   };
 
-  // ✅ Получаем ID чата для события (может быть в eventDetails или вычисляться)
-  const getChatId = () => {
-    return "string"
+  // 🆕 Получаем ID чата из eventDetails.chatId
+  const getChatId = (): string | null => {
+    return eventDetails?.chatId ?? null;
   };
 
   const getStatusBadgeStyle = (status: string) => {
@@ -114,14 +113,23 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     return [organizer, ...otherMembers];
   };
 
-  // ✅ Проверка: пользователь является участником события
+  // Проверка: пользователь является участником события
   const isParticipant = eventDetails && (
     eventDetails.initiator.username === user?.name ||
     eventDetails.members?.some(m => m.username === user?.name)
   );
 
-  // ✅ Если чат открыт - рендерим только чат
+  // 🆕 Проверка: есть ли чат у этого события
+  const hasChat = eventDetails?.chatId !== null && eventDetails?.chatId !== undefined;
+
+  // Если чат открыт - рендерим только чат
   if (isChatOpen) {
+    const chatId = getChatId();
+    if (!chatId) {
+      setIsChatOpen(false);
+      return null;
+    }
+    
     return (
       <div
         style={{
@@ -148,7 +156,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           <ChatWindow
-            chatId={getChatId()}
+            chatId={chatId}
             onClose={() => setIsChatOpen(false)}
             currentUsername={user?.name || ''}
           />
@@ -210,6 +218,25 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 }}>
                   {eventDetails?.title || 'Загрузка...'}
                 </h3>
+                {/* 🆕 Индикатор наличия чата */}
+                {hasChat && (
+                  <span style={{
+                    padding: `${spacing.xs} ${spacing.sm}`,
+                    backgroundColor: colors.primary + '20',
+                    color: colors.primary,
+                    borderRadius: borderRadius.full,
+                    fontSize: typography.fontSize.xs,
+                    fontWeight: typography.fontWeight.semibold,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: spacing.xs,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Есть чат
+                  </span>
+                )}
               </div>
             )}
             <p style={{
@@ -397,8 +424,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
           </div>
         </div>
 
-        {/* ✅ Кнопка перехода в чат */}
-        {isParticipant && (
+        {/* 🆕 Кнопка перехода в чат (показывается только если чат существует) */}
+        {isParticipant && hasChat && (
           <div style={{
             marginBottom: spacing.lg,
             padding: spacing.md,
@@ -459,6 +486,33 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               </svg>
               Открыть чат
             </button>
+          </div>
+        )}
+
+        {/* 🆕 Сообщение если чат не создан */}
+        {isParticipant && !hasChat && (
+          <div style={{
+            marginBottom: spacing.lg,
+            padding: spacing.md,
+            backgroundColor: colors.gray100,
+            borderRadius: borderRadius.md,
+            border: `1px solid ${colors.gray200}`,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: spacing.sm,
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.gray400} strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span style={{
+                fontSize: typography.fontSize.sm,
+                color: colors.gray500,
+              }}>
+                Для этой встречи чат не был создан
+              </span>
+            </div>
           </div>
         )}
 

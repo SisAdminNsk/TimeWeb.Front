@@ -12,3 +12,13 @@ export interface GetChatHistoryResponse{
     totalCount: number,
     messages: MessageDto[]
 }
+
+export interface CreateChatRequest{
+    chatId: string,
+    chatName: string,
+    participantIds: string[]
+}
+
+export interface CreateChatResponse{
+    chatId: string
+}

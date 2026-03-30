@@ -1,4 +1,3 @@
-// ChatWindow.tsx
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { useChatHub } from '../hooks/UseChatHub';
 import { theme } from '../styles/theme';
@@ -35,7 +34,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onClose,
   currentUsername,
 }) => {
-  const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
+  const { colors, typography, spacing, borderRadius, shadows } = theme;
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showNewMessageNotification, setShowNewMessageNotification] = useState(false);
@@ -56,7 +55,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     sendMessage,
     joinChat,
     leaveChat,
-    error,
     isLoadingHistory,
     hasMoreHistory,
     loadMoreHistory,
@@ -114,14 +112,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     const container = messagesContainerRef.current;
     if (!container || scrollLockRef.current || isLoadingHistory) return;
 
-    // Триггер подгрузки старых сообщений
     if (container.scrollTop < SCROLL_THRESHOLD && hasMoreHistory) {
       scrollLockRef.current = true;
       previousScrollHeightRef.current = container.scrollHeight;
       loadMoreHistory();
     }
     
-    // Убираем уведомление, если пользователь сам доскроллил вниз
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_OFFSET_FOR_NOTIFICATION;
     if (isNearBottom) {
       setShowNewMessageNotification(false);
@@ -137,7 +133,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     try {
       await sendMessage(messageInput.trim());
       setMessageInput('');
-      // Принудительный скролл вниз после отправки
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     } catch (err) {
       console.error(err);
@@ -160,8 +155,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column', 
-      height: '100vh', // Занимает всю высоту родителя или экрана
-      maxHeight: '100%', // Не дает выходить за границы
+      height: '100vh',
+      maxHeight: '100%',
       backgroundColor: colors.white, 
       borderRadius: borderRadius.lg, 
       boxShadow: shadows.lg, 

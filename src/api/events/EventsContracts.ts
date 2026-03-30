@@ -3,7 +3,8 @@ export interface CreateEventRequest {
   endAt: string,
   title: string,
   description: string,
-  memberIds: string[]
+  memberIds: string[],
+  needChat: boolean
 }
 
 export interface RemoveEventRequest{
@@ -12,6 +13,7 @@ export interface RemoveEventRequest{
 
 export interface CreateEventResponse{
     eventId: string
+    chatId: string | null
 }
 
 export interface SearchEventsRequest{
@@ -36,7 +38,8 @@ export interface EventDto{
     description: string,
     startAt: string,
     endAt: string,
-    createdAt: string
+    createdAt: string,
+    chatId: string | null
 }
 
 export interface EventMemberDto{
@@ -90,6 +93,7 @@ export interface DetailedEventDto{
     createdAt: string,
     deletedAt: string | null,
     deletedReason: string | null
+    chatId: string | null
 }
 
 export interface AcceptEventResponse{

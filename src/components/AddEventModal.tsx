@@ -24,6 +24,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [needChat, setNeedChat] = useState(true); // 🆕 По умолчанию чат создаётся
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isFriendsSelectorOpen, setIsFriendsSelectorOpen] = useState(false);
 
@@ -57,11 +58,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         startTime,
         endTime,
         friendIds: selectedFriendIds,
+        needChat, // 🆕 Передаём флаг needChat
       });
       
       addToast({
         title: 'Встреча создана',
-        message: 'Встреча успешно добавлена в календарь',
+        message: needChat ? 'Встреча и чат успешно созданы' : 'Встреча успешно добавлена в календарь',
         type: 'success',
       });
       
@@ -70,6 +72,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       setStartTime('09:00');
       setEndTime('10:00');
       setSelectedFriendIds([]);
+      setNeedChat(true);
       setErrors({});
       onClose();
     } catch (err) {
@@ -170,15 +173,14 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       fontFamily: 'inherit',
       color: colors.gray900,
     } as React.CSSProperties,
-    // Новый стиль специально для инпутов времени
     timeInput: {
       width: '100%',
       padding: `${spacing.sm} ${spacing.md}`,
       border: `1px solid ${colors.gray300}`,
       borderRadius: borderRadius.md,
       fontSize: typography.fontSize.base,
-      fontWeight: typography.fontWeight.medium, // Более насыщенный шрифт
-      textAlign: 'center' as const, // Центрирование времени
+      fontWeight: typography.fontWeight.medium,
+      textAlign: 'center' as const,
       color: colors.gray900,
       transition: `all ${transitions.fast}`,
       boxSizing: 'border-box' as const,
@@ -271,13 +273,41 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       fontSize: typography.fontSize.xs,
       fontWeight: typography.fontWeight.semibold,
     } as React.CSSProperties,
-    // Стиль для подписей под временем
     timeSubLabel: {
       fontSize: typography.fontSize.xs,
       color: colors.gray500,
       marginTop: spacing.xs,
       textAlign: 'center' as const,
       fontWeight: typography.fontWeight.medium,
+    } as React.CSSProperties,
+    // 🆕 Стили для чекбокса
+    checkboxContainer: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: spacing.sm,
+      padding: spacing.sm,
+      backgroundColor: colors.gray50,
+      borderRadius: borderRadius.md,
+      border: `1px solid ${colors.gray200}`,
+      cursor: isLoading ? 'not-allowed' : 'pointer',
+      transition: `all ${transitions.fast}`,
+    } as React.CSSProperties,
+    checkbox: {
+      width: '18px',
+      height: '18px',
+      cursor: isLoading ? 'not-allowed' : 'pointer',
+      accentColor: colors.primary,
+    } as React.CSSProperties,
+    checkboxLabel: {
+      fontSize: typography.fontSize.sm,
+      color: colors.gray700,
+      fontWeight: typography.fontWeight.medium,
+      flex: 1,
+    } as React.CSSProperties,
+    checkboxHint: {
+      fontSize: typography.fontSize.xs,
+      color: colors.gray500,
+      marginTop: spacing.xs,
     } as React.CSSProperties,
   };
 
@@ -350,9 +380,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     onBlur={(e) => e.target.style.borderColor = errors.startTime ? colors.error : colors.gray300}
                   />
                   {errors.startTime && <div style={styles.error}>{errors.startTime}</div>}
-                  <div style={styles.timeSubLabel}>
-                    Начало
-                  </div>
+                  <div style={styles.timeSubLabel}>Начало</div>
                 </div>
                 <div>
                   <input
@@ -368,9 +396,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     onBlur={(e) => e.target.style.borderColor = errors.endTime ? colors.error : colors.gray300}
                   />
                   {errors.endTime && <div style={styles.error}>{errors.endTime}</div>}
-                  <div style={styles.timeSubLabel}>
-                    Окончание
-                  </div>
+                  <div style={styles.timeSubLabel}>Окончание</div>
                 </div>
               </div>
             </div>
@@ -407,6 +433,44 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                   Выбрано друзей: {selectedFriendIds.length}
                 </div>
               )}
+            </div>
+
+            {/* 🆕 Чекбокс для создания чата */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Настройки чата</label>
+              <div
+                style={styles.checkboxContainer}
+                onClick={() => !isLoading && setNeedChat(!needChat)}
+                onMouseOver={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.primary + '10';
+                    e.currentTarget.style.borderColor = colors.primary;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = colors.gray50;
+                    e.currentTarget.style.borderColor = colors.gray200;
+                  }
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={needChat}
+                  onChange={(e) => setNeedChat(e.target.checked)}
+                  style={styles.checkbox}
+                  disabled={isLoading}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <span style={styles.checkboxLabel}>
+                  Создать групповой чат для участников
+                </span>
+              </div>
+              <div style={styles.checkboxHint}>
+                {needChat 
+                  ? 'После создания встречи будет создан чат для всех участников' 
+                  : 'Чат не будет создан. Участники смогут общаться другими способами'}
+              </div>
             </div>
 
             <div style={styles.footer}>
@@ -477,7 +541,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             transform: translateY(0);
           }
         }
-        /* Убираем стандартные иконки календаря/часов в некоторых браузерах для чистоты */
         input[type="time"]::-webkit-calendar-picker-indicator {
           cursor: pointer;
           opacity: 0.6;
