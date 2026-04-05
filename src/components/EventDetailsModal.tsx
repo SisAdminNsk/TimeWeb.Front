@@ -447,7 +447,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 fontWeight: typography.fontWeight.semibold,
                 color: colors.primary,
               }}>
-                Групповой чат события
+                Чат встречи
               </span>
             </div>
             <button

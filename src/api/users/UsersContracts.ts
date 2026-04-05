@@ -88,6 +88,19 @@ export interface ChangePasswordRequest{
   newPassword: string
 }
 
+export interface GetUsersLastSeenRequest{
+    userIds: string[]
+}
+
+export interface GetUsersLastSeenResponse{
+    usersLastSeen: UserLastSeenDto[]
+}
+
+export interface UserLastSeenDto{
+    userId: string,
+    lastSeenAt: string | null
+}
+
 export const PROFILE_ATTRIBUTES = {
   Email: 'base/email',
   Birthdate: 'base/birthdate',

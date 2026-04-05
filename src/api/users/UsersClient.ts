@@ -13,7 +13,9 @@ import type {
   RefreshTokenRequest,
   RefreshTokenResponse,
   GetLoginsResponse,
-  ChangePasswordRequest
+  ChangePasswordRequest,
+  GetUsersLastSeenResponse,
+  GetUsersLastSeenRequest
 } from './UsersContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -155,4 +157,31 @@ export const usersClient = {
   
     return handleResponse<GetLoginsResponse>(response);
   },
+
+  ping: async (authToken: string): Promise<void> => {
+    
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/online`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  
+    return handleResponse<void>(response);
+  },
+
+  getUsersLastSeen: async (authToken: string, request: GetUsersLastSeenRequest): Promise<GetUsersLastSeenResponse> => {
+
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/online/last-activity`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+
+    return handleResponse<GetUsersLastSeenResponse>(response);
+  }
 }

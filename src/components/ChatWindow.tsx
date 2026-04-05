@@ -20,7 +20,7 @@ interface Message {
 
 interface DateSeparator {
   type: 'separator';
-  date: string;
+  date: string; // Храним оригинальную строку createdAt для конвертации
   id: string;
 }
 
@@ -67,7 +67,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     };
   }, [chatId, joinChat, leaveChat]);
 
-  // СИНХРОННАЯ КОРРЕКТИРОВКА СКРОЛЛА (Чтобы не было прыжков при подгрузке вверх)
   useLayoutEffect(() => {
     if (scrollLockRef.current && messagesContainerRef.current) {
       const container = messagesContainerRef.current;
@@ -79,7 +78,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   }, [messages]);
 
-  // АВТОСКРОЛЛ ВНИЗ И УВЕДОМЛЕНИЯ
   useEffect(() => {
     if (!messagesContainerRef.current || messages.length === 0) return;
     
@@ -141,11 +139,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   };
 
+  // Формирование списка сообщений с разделителями дат
+  // Важно: Группировка происходит по ЛОКАЛЬНОМУ времени устройства, а не UTC
   const messagesWithSeparators: ChatListItem[] = messages.reduce((acc, msg, idx) => {
-    const date = msg.createdAt.split('T')[0];
-    const prevDate = idx > 0 ? messages[idx - 1].createdAt.split('T')[0] : null;
-    if (date !== prevDate) {
-      acc.push({ type: 'separator', date: msg.createdAt, id: `sep-${date}` });
+    // Создаем объект даты. Если строка ISO (UTC), JS автоматически учтет это.
+    const msgDate = new Date(msg.createdAt);
+    
+    // Получаем ключ даты на основе локального времени устройства (год-месяц-день)
+    // Это гарантирует, что сообщения группируются по "вашему" дню, а не по дню на сервере
+    const localDateKey = `${msgDate.getFullYear()}-${msgDate.getMonth()}-${msgDate.getDate()}`;
+    
+    const prevMsg = idx > 0 ? messages[idx - 1] : null;
+    let prevLocalDateKey = null;
+    
+    if (prevMsg) {
+      const prevDate = new Date(prevMsg.createdAt);
+      prevLocalDateKey = `${prevDate.getFullYear()}-${prevDate.getMonth()}-${prevDate.getDate()}`;
+    }
+
+    // Если локальная дата отличается от предыдущего сообщения, добавляем разделитель
+    if (localDateKey !== prevLocalDateKey) {
+      acc.push({ 
+        type: 'separator', 
+        date: msg.createdAt, // Сохраняем оригинальную строку для последующей конвертации
+        id: `sep-${localDateKey}` 
+      });
     }
     acc.push(msg);
     return acc;
@@ -164,7 +182,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       position: 'relative' 
     }}>
       
-      {/* HEADER (Фиксированная высота) */}
+      {/* HEADER */}
       <div style={{ 
         padding: spacing.md, 
         borderBottom: `1px solid ${colors.gray200}`, 
@@ -178,7 +196,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: colors.gray400 }}>×</button>
       </div>
 
-      {/* MESSAGES AREA (Занимает всё свободное место, скроллится только здесь) */}
+      {/* MESSAGES AREA */}
       <div 
         ref={messagesContainerRef}
         onScroll={handleScroll}
@@ -199,15 +217,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         )}
         
         {messagesWithSeparators.map((item) => {
-          if ('type' in item) return (
-            <div key={item.id} style={{ textAlign: 'center', margin: '15px 0' }}>
-              <span style={{ fontSize: '12px', color: colors.gray500, background: colors.gray200, padding: '2px 10px', borderRadius: '10px' }}>
-                {new Date(item.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
-              </span>
-            </div>
-          );
+          if ('type' in item) {
+            // Конвертируем UTC время разделителя в локальное время устройства для отображения
+            const dateObj = new Date(item.date);
+            const formattedDate = dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+            
+            return (
+              <div key={item.id} style={{ textAlign: 'center', margin: '15px 0' }}>
+                <span style={{ fontSize: '12px', color: colors.gray500, background: colors.gray200, padding: '2px 10px', borderRadius: '10px' }}>
+                  {formattedDate}
+                </span>
+              </div>
+            );
+          }
 
           const isMine = item.username === currentUsername;
+          
+          // Конвертируем UTC время сообщения в локальное время устройства
+          const timeObj = new Date(item.createdAt);
+          const formattedTime = timeObj.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
           return (
             <div key={item.id} style={{ 
               display: 'flex', 
@@ -227,7 +256,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               }}>
                 <div style={{ fontSize: '14px', lineHeight: '1.4', wordBreak: 'break-word' }}>{item.content}</div>
                 <div style={{ fontSize: '10px', opacity: 0.7, textAlign: 'right', marginTop: '2px' }}>
-                  {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formattedTime}
                 </div>
               </div>
             </div>
@@ -236,7 +265,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         <div ref={messagesEndRef} style={{ height: '1px' }} />
       </div>
 
-      {/* КНОПКА "ВНИЗ" (Абсолютное позиционирование поверх сообщений) */}
+      {/* КНОПКА "ВНИЗ" */}
       {showNewMessageNotification && (
         <div 
           onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
@@ -262,7 +291,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       )}
 
-      {/* INPUT AREA (Фиксированная высота, прижата к низу) */}
+      {/* INPUT AREA */}
       <form 
         onSubmit={handleSendMessage} 
         style={{ 

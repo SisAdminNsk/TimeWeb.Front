@@ -13,6 +13,8 @@ import { CabinetPage } from './pages/CabinetPage';
 import { EventsPage } from './pages/EventsPage';
 import { FriendsPage } from './pages/FriendsPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { KeepAlivePing } from './components/KeepAlivePing';
+
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -86,6 +88,7 @@ export const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <KeepAlivePing />
         <ToastProvider>
           <Routes>
             <Route 
