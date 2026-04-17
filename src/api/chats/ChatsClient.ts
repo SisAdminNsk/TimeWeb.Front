@@ -1,7 +1,10 @@
 import type {
     CreateChatRequest,
   GetChatHistoryResponse,
-  CreateChatResponse
+  CreateChatResponse,
+  CreatePersonalChatRequest,
+  CreatePersonalChatResponse,
+  GetPersonalChatResponse
 } from './ChatsContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -38,6 +41,27 @@ export const chatsClient = {
     });
     return handleResponse<CreateChatResponse>(response);
   },
+
+  createPersonalChat: async(
+    authToken: string,
+    request: CreatePersonalChatRequest): Promise<CreatePersonalChatResponse> => {
+
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/chats/personal-chat`, {
+      method: 'POST',
+      headers: getHeaders(authToken),
+      body: JSON.stringify(request)
+    });
+    return handleResponse<CreatePersonalChatResponse>(response);
+  },
+
+  getPersonalChat: async(authToken: string, participantId: string): Promise<GetPersonalChatResponse> => {
+
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/chats/personal-chat/${participantId}`, {
+      method: 'GET',
+      headers: getHeaders(authToken)
+    });
+    return handleResponse<GetPersonalChatResponse>(response);
+  }
 };
 
 function getHeaders(authToken: string | null): HeadersInit {

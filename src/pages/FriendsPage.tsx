@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useFriends } from '../context/FriendsContext';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ToastContainer } from '../components/ToastContainer';
+import ChatWindow from '../components/ChatWindow';
+import { usePersonalChatOpener } from '../hooks/UsePersonalChatOpener';
 import { theme } from '../styles/theme';
 
 type SectionType = 'friends' | 'incoming' | 'outgoing' | 'add';
@@ -11,6 +14,12 @@ interface DeleteModalState {
   itemId: string | null;
   itemName: string | null;
   actionType: 'removeFriend' | 'declineInvite' | 'declineOutgoing' | null;
+}
+
+interface ActivePersonalChat {
+  chatId: string;
+  participantId: string;
+  participantName: string;
 }
 
 export const FriendsPage = () => {
@@ -42,21 +51,28 @@ export const FriendsPage = () => {
     clearNotification,
   } = useFriends();
 
+  const { user } = useAuth();
   const { addToast } = useToast();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
+
+  const { 
+    openPersonalChat, 
+    isLoading: isChatLoading, 
+    error: chatError,
+    clearError: clearChatError,
+  } = usePersonalChatOpener();
 
   const [activeSection, setActiveSection] = useState<SectionType>('friends');
   const [usernameInput, setUsernameInput] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activePersonalChat, setActivePersonalChat] = useState<ActivePersonalChat | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      if (!mobile) {
-        setIsSidebarOpen(true);
-      }
+      if (!mobile) setIsSidebarOpen(true);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -76,9 +92,7 @@ export const FriendsPage = () => {
   }, []);
 
   useEffect(() => {
-    if (isMobile) {
-      setIsSidebarOpen(false);
-    }
+    if (isMobile) setIsSidebarOpen(false);
   }, [activeSection, isMobile]);
 
   useEffect(() => {
@@ -93,33 +107,32 @@ export const FriendsPage = () => {
     }
   }, [notification, addToast, clearNotification]);
 
+  useEffect(() => {
+    if (chatError) {
+      addToast({ title: 'Ошибка', message: chatError, type: 'error' });
+      const timer = setTimeout(() => clearChatError(), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [chatError, clearChatError, addToast]);
+
   const getFriendStatus = (lastSeenAt: string | null) => {
     if (!lastSeenAt) return { text: 'был(а) в сети давно', color: colors.gray500 };
-    
     const date = new Date(lastSeenAt);
     if (isNaN(date.getTime())) return { text: 'был(а) в сети давно', color: colors.gray500 };
-
     const diffMs = Date.now() - date.getTime();
     if (diffMs < 2 * 60 * 1000) return { text: 'в сети', color: colors.success };
-
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterdayStart = todayStart - 86400000; // 24 * 60 * 60 * 1000
+    const yesterdayStart = todayStart - 86400000;
     const dateTs = date.getTime();
-
-    // JS автоматически конвертирует UTC в локальное время при форматировании
     const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
     let text = '';
-    if (dateTs >= todayStart) {
-      text = `сегодня в ${timeStr}`;
-    } else if (dateTs >= yesterdayStart) {
-      text = `вчера в ${timeStr}`;
-    } else {
+    if (dateTs >= todayStart) text = `сегодня в ${timeStr}`;
+    else if (dateTs >= yesterdayStart) text = `вчера в ${timeStr}`;
+    else {
       const dateStr = date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
       text = `${dateStr} в ${timeStr}`;
     }
-
     return { text, color: colors.gray500 };
   };
 
@@ -133,8 +146,7 @@ export const FriendsPage = () => {
     try {
       await sendFriendRequest(usernameInput.trim());
       setUsernameInput('');
-    } catch {
-    }
+    } catch {}
   };
 
   const handleAcceptInvite = async (inviteId: string) => {
@@ -220,7 +232,6 @@ export const FriendsPage = () => {
   const friendsList = Array.isArray(friends) ? friends : [];
   const incomingList = Array.isArray(incomingInvites) ? incomingInvites : [];
   const outgoingList = Array.isArray(outgoingInvites) ? outgoingInvites : [];
-
   const containerStyle: React.CSSProperties = { minHeight: '100%', padding: isMobile ? spacing.md : 0 };
   const pageHeaderStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? spacing.lg : spacing.xl, paddingBottom: isMobile ? spacing.md : spacing.lg, borderBottom: `1px solid ${colors.gray200}`, flexWrap: 'wrap', gap: spacing.sm };
   const pageTitleStyle: React.CSSProperties = { margin: 0, fontSize: isMobile ? typography.fontSize.xl : typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.gray900 };
@@ -241,7 +252,27 @@ export const FriendsPage = () => {
   const sectionDescriptionStyle: React.CSSProperties = { margin: `${spacing.xs} 0 0 0`, fontSize: typography.fontSize.sm, color: colors.gray500 };
   const sectionBodyStyle: React.CSSProperties = { padding: isMobile ? spacing.md : spacing.xl };
   const buttonSecondaryStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, fontSize: typography.fontSize.sm, backgroundColor: 'transparent', color: colors.gray700, border: `1px solid ${colors.gray300}`, borderRadius: borderRadius.md, cursor: 'pointer', fontWeight: typography.fontWeight.medium, transition: `all ${transitions.normal}`, display: 'flex', alignItems: 'center', gap: spacing.xs, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
-  const getActionButtonStyle = (variant: 'success' | 'danger' | 'secondary', disabled: boolean = false): React.CSSProperties => ({ padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.xs, backgroundColor: disabled ? colors.gray200 : variant === 'success' ? colors.success : variant === 'danger' ? colors.error : colors.gray100, color: disabled ? colors.gray400 : variant === 'secondary' ? colors.gray600 : colors.white, border: variant === 'secondary' ? `1px solid ${colors.gray300}` : 'none', borderRadius: borderRadius.md, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: typography.fontWeight.medium, transition: `all ${transitions.fast}`, opacity: disabled ? 0.6 : 1, outline: 'none', whiteSpace: 'nowrap' as const, display: 'flex', alignItems: 'center', gap: spacing.xs });
+  const getActionButtonStyle = (variant: 'success' | 'danger' | 'secondary' | 'chat', disabled: boolean = false): React.CSSProperties => ({ 
+    padding: `${spacing.xs} ${spacing.sm}`, 
+    fontSize: typography.fontSize.xs, 
+    backgroundColor: disabled ? colors.gray200 : 
+      variant === 'success' ? colors.success : 
+      variant === 'danger' ? colors.error : 
+      variant === 'chat' ? colors.primary : colors.gray100, 
+    color: disabled ? colors.gray400 : 
+      variant === 'secondary' ? colors.gray600 : colors.white, 
+    border: variant === 'secondary' ? `1px solid ${colors.gray300}` : 'none', 
+    borderRadius: borderRadius.md, 
+    cursor: disabled ? 'not-allowed' : 'pointer', 
+    fontWeight: typography.fontWeight.medium, 
+    transition: `all ${transitions.fast}`, 
+    opacity: disabled ? 0.6 : 1, 
+    outline: 'none', 
+    whiteSpace: 'nowrap' as const, 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: spacing.xs 
+  });
   const listStyle: React.CSSProperties = { backgroundColor: colors.white, borderRadius: borderRadius.lg, boxShadow: shadows.sm, border: `1px solid ${colors.gray200}`, overflow: 'hidden' };
   const listItemStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${colors.gray100}`, transition: `background ${transitions.fast}` };
   const listItemMobileStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${colors.gray100}`, transition: `background ${transitions.fast}`, gap: spacing.md };
@@ -276,6 +307,16 @@ export const FriendsPage = () => {
   const modalActionsStyle: React.CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: spacing.sm, flexWrap: isMobile ? 'wrap' : 'nowrap' };
   const modalButtonCancelStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, backgroundColor: colors.white, color: colors.gray700, border: `1px solid ${colors.gray300}`, borderRadius: borderRadius.md, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, cursor: 'pointer', transition: `all ${transitions.normal}`, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
   const modalButtonDeleteStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, backgroundColor: colors.error, color: colors.white, border: 'none', borderRadius: borderRadius.md, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, cursor: 'pointer', transition: `all ${transitions.normal}`, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
+  const chatModalOverlayStyle: React.CSSProperties = { 
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', 
+    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+    zIndex: 3000, animation: 'fadeIn 0.2s ease', padding: spacing.lg 
+  };
+  const chatModalContentStyle: React.CSSProperties = { 
+    width: '100%', maxWidth: '600px', height: '80vh', maxHeight: '700px', 
+    animation: 'slideInUp 0.3s ease' 
+  };
 
   const renderAvatar = (name: string, size: 'sm' | 'md' | 'lg' = 'md') => {
     const sizeMap = { sm: 32, md: isMobile ? 36 : 40, lg: 48 };
@@ -319,32 +360,75 @@ export const FriendsPage = () => {
           </div>
         ) : (
           <div style={listStyle}>
-            {friendsList.map((friend) => (
-              <div key={friend.friendId} style={isMobile ? listItemMobileStyle : listItemStyle}>
-                <div style={listItemLeftStyle}>
-                  {renderAvatar(getFriendName(friend), 'md')}
-                  <div style={listItemContentStyle}>
-                    <div style={listItemTitleStyle}>
-                      {getFriendName(friend)}
-                      {(() => {
-                        const status = getFriendStatus(friendsLastSeen[friend.friendId]);
-                        return (
-                          <span style={{ marginLeft: 6, fontSize: typography.fontSize.xs, fontWeight: 500, color: status.color }}>
-                            {status.text}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    <div style={listItemMetaStyle}>
-                      В друзьях с {friend.friendshipStartDate ? new Date(friend.friendshipStartDate).toLocaleDateString('ru-RU') : '-'}
+            {friendsList.map((friend) => {
+              const friendName = getFriendName(friend);
+              const isDisabled = isChatLoading || isLoading;
+              
+              return (
+                <div key={friend.friendId} style={isMobile ? listItemMobileStyle : listItemStyle}>
+                  <div style={listItemLeftStyle}>
+                    {renderAvatar(friendName, 'md')}
+                    <div style={listItemContentStyle}>
+                      <div style={listItemTitleStyle}>
+                        {friendName}
+                        {(() => {
+                          const status = getFriendStatus(friendsLastSeen[friend.friendId]);
+                          return (
+                            <span style={{ marginLeft: 6, fontSize: typography.fontSize.xs, fontWeight: 500, color: status.color }}>
+                              {status.text}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <div style={listItemMetaStyle}>
+                        В друзьях с {friend.friendshipStartDate ? new Date(friend.friendshipStartDate).toLocaleDateString('ru-RU') : '-'}
+                      </div>
                     </div>
                   </div>
+                  
+                  <div style={isMobile ? actionButtonsMobileStyle : actionButtonsStyle}>
+                    
+                    <button 
+                      style={getActionButtonStyle('chat', isDisabled)}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await openPersonalChat(friend.friendId, async (chatId) => {
+                            setActivePersonalChat({
+                              chatId,
+                              participantId: friend.friendId,
+                              participantName: friendName,
+                            });
+                          });
+                        } catch (err) {
+                          console.error('Failed to open chat:', err);
+                        }
+                      }}
+                      disabled={isDisabled}
+                      title="Открыть чат"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                      {isChatLoading ? '...' : (isMobile ? 'Чат' : 'Чат')}
+                    </button>
+                    
+                    <button 
+                      style={getActionButtonStyle('danger', isLoading)} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFriendClick(friend.friendId, friendName);
+                      }} 
+                      disabled={isLoading} 
+                      title="Удалить из друзей"
+                    >
+                      {isMobile ? 'Удалить' : 'Удалить'}
+                    </button>
+                    
+                  </div>
                 </div>
-                <button style={getActionButtonStyle('danger', isLoading)} onClick={() => handleRemoveFriendClick(friend.friendId, getFriendName(friend))} disabled={isLoading} title="Удалить из друзей">
-                  {isMobile ? 'Удалить' : 'Удалить'}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {renderPagination(friendsPage, friendsTotalPages, handleFriendsPageChange, isLoading)}
@@ -560,6 +644,7 @@ export const FriendsPage = () => {
           {!isLoading && activeSection === 'add' && renderAddFriend()}
         </main>
       </div>
+      
       {deleteModal.isOpen && (
         <div style={modalOverlayStyle} onClick={handleDeleteCancel}>
           <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
@@ -578,10 +663,27 @@ export const FriendsPage = () => {
           </div>
         </div>
       )}
+
+      {activePersonalChat && user?.name && (
+        <div style={chatModalOverlayStyle} onClick={() => setActivePersonalChat(null)}>
+          <div style={chatModalContentStyle} onClick={(e) => e.stopPropagation()}>
+            <ChatWindow
+              chatId={activePersonalChat.chatId}
+              currentUsername={user.name}
+              onClose={() => setActivePersonalChat(null)}
+              chatTitle={activePersonalChat.participantName}
+              isPersonal={true}
+              participantId={activePersonalChat.participantId}
+            />
+          </div>
+        </div>
+      )}
+      
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         button:focus { outline: none !important; }
         @media (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }
       `}</style>

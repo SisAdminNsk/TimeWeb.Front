@@ -7,7 +7,7 @@ import { theme } from '../styles/theme';
 
 const EventsPageContent = () => {
   const { selectedDate, selectDate, refetchEvents } = useEvents();
-  const { colors, typography, spacing, borderRadius } = theme;
+  const { colors, typography, spacing } = theme;
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);

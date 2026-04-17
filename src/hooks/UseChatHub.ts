@@ -47,13 +47,14 @@ const isUnauthorizedError = (err: unknown): boolean => {
 export const useChatHub = (): UseChatHubResult => {
   const { getToken, handleUnauthorized } = useAuth();
 
-  const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
+  // ✅ Стейты только для UI-состояний
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
 
+  // ✅ Реф для хранения экземпляра соединения (императивный доступ)
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const currentChatId = useRef<string | null>(null);
 
@@ -249,7 +250,6 @@ export const useChatHub = (): UseChatHubResult => {
   }, []);
 
   // ──────────────────────────────────────────────
-  // ИСПРАВЛЕННЫЙ loadMoreHistory (главный фикс прыжка)
   const loadMoreHistory = useCallback(async () => {
     if (!currentChatId.current || isLoadingHistory || !hasMoreHistory) return;
 
@@ -283,7 +283,6 @@ export const useChatHub = (): UseChatHubResult => {
           (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
 
-        // ← ИСПРАВЛЕНИЕ: оставляем САМЫЕ НОВЫЕ сообщения
         return sorted.length > MAX_MESSAGES
           ? sorted.slice(sorted.length - MAX_MESSAGES)
           : sorted;
@@ -303,8 +302,7 @@ export const useChatHub = (): UseChatHubResult => {
     if (conn) await conn.stop();
 
     const newConnection = createConnection();
-    connectionRef.current = newConnection;
-    setConnection(newConnection);
+    connectionRef.current = newConnection; // ✅ Только реф, без setConnection
 
     try {
       await startConnectionWithRefresh(newConnection);
@@ -322,8 +320,7 @@ export const useChatHub = (): UseChatHubResult => {
   // ──────────────────────────────────────────────
   useEffect(() => {
     const newConnection = createConnection();
-    connectionRef.current = newConnection;
-    setConnection(newConnection);
+    connectionRef.current = newConnection; // ✅ Только реф
 
     return () => {
       newConnection.stop().catch(console.error);

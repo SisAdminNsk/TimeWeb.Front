@@ -22,3 +22,15 @@ export interface CreateChatRequest{
 export interface CreateChatResponse{
     chatId: string
 }
+
+export interface CreatePersonalChatRequest{
+    participantId: string
+}
+
+export interface CreatePersonalChatResponse{
+    chatId: string
+}
+
+export interface GetPersonalChatResponse{
+    chatId: string
+}

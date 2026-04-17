@@ -6,6 +6,12 @@ interface ChatWindowProps {
   chatId: string;
   onClose: () => void;
   currentUsername: string;
+  /** ✅ Заголовок чата: имя собеседника (для личных) или название группы */
+  chatTitle?: string;
+  /** ✅ Флаг, что это личный чат (для отображения бейджа) */
+  isPersonal?: boolean;
+  /** ✅ ID собеседника (опционально, для дополнительной логики) */
+  participantId?: string;
 }
 
 interface Message {
@@ -20,7 +26,7 @@ interface Message {
 
 interface DateSeparator {
   type: 'separator';
-  date: string; // Храним оригинальную строку createdAt для конвертации
+  date: string;
   id: string;
 }
 
@@ -33,8 +39,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   chatId,
   onClose,
   currentUsername,
+  chatTitle,
+  isPersonal = false,
+  participantId,
 }) => {
-  const { colors, typography, spacing, borderRadius, shadows } = theme;
+  const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showNewMessageNotification, setShowNewMessageNotification] = useState(false);
@@ -140,13 +149,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   };
 
   // Формирование списка сообщений с разделителями дат
-  // Важно: Группировка происходит по ЛОКАЛЬНОМУ времени устройства, а не UTC
   const messagesWithSeparators: ChatListItem[] = messages.reduce((acc, msg, idx) => {
-    // Создаем объект даты. Если строка ISO (UTC), JS автоматически учтет это.
     const msgDate = new Date(msg.createdAt);
-    
-    // Получаем ключ даты на основе локального времени устройства (год-месяц-день)
-    // Это гарантирует, что сообщения группируются по "вашему" дню, а не по дню на сервере
     const localDateKey = `${msgDate.getFullYear()}-${msgDate.getMonth()}-${msgDate.getDate()}`;
     
     const prevMsg = idx > 0 ? messages[idx - 1] : null;
@@ -157,17 +161,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       prevLocalDateKey = `${prevDate.getFullYear()}-${prevDate.getMonth()}-${prevDate.getDate()}`;
     }
 
-    // Если локальная дата отличается от предыдущего сообщения, добавляем разделитель
     if (localDateKey !== prevLocalDateKey) {
       acc.push({ 
         type: 'separator', 
-        date: msg.createdAt, // Сохраняем оригинальную строку для последующей конвертации
+        date: msg.createdAt,
         id: `sep-${localDateKey}` 
       });
     }
     acc.push(msg);
     return acc;
   }, [] as ChatListItem[]);
+
+  // Заголовок чата: используем chatTitle или дефолтное значение
+  const headerTitle = chatTitle || (isPersonal ? 'Личный чат' : 'Чат');
 
   return (
     <div style={{ 
@@ -179,7 +185,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
       borderRadius: borderRadius.lg, 
       boxShadow: shadows.lg, 
       overflow: 'hidden', 
-      position: 'relative' 
+      position: 'relative',
+      minWidth: '320px',
+      maxWidth: '100%',
     }}>
       
       {/* HEADER */}
@@ -192,8 +200,82 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         background: colors.white,
         zIndex: 2
       }}>
-        <h3 style={{ margin: 0, fontFamily: typography.fontFamily, fontSize: typography.fontSize.lg }}>Чат</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: colors.gray400 }}>×</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          {/* Аватар для личного чата */}
+          {isPersonal && (
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              backgroundColor: colors.primary,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: colors.white,
+              fontSize: '13px',
+              fontWeight: typography.fontWeight.semibold,
+              flexShrink: 0,
+            }}>
+              👤
+            </div>
+          )}
+          
+          <h3 style={{ 
+            margin: 0, 
+            fontFamily: typography.fontFamily, 
+            fontSize: typography.fontSize.lg,
+            fontWeight: typography.fontWeight.semibold,
+            color: colors.gray900,
+          }}>
+            {headerTitle}
+          </h3>
+          
+          {/* Бейдж "личный" */}
+          {isPersonal && (
+            <span style={{ 
+              fontSize: typography.fontSize.xs || '10px', 
+              color: colors.successDark,
+              backgroundColor: colors.successLight,
+              padding: `2px ${spacing.xs}`,
+              borderRadius: borderRadius.sm,
+              fontWeight: typography.fontWeight.medium,
+              lineHeight: 1,
+            }}>
+              личный
+            </span>
+          )}
+        </div>
+        
+        {/* Кнопка закрытия */}
+        <button 
+          onClick={onClose} 
+          style={{ 
+            background: 'none', 
+            border: 'none', 
+            cursor: 'pointer', 
+            fontSize: '28px', 
+            color: colors.gray400,
+            padding: spacing.xs,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: borderRadius.sm,
+            transition: `all ${transitions.fast}`,
+            lineHeight: 1,
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = colors.gray100;
+            e.currentTarget.style.color = colors.gray600;
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = colors.gray400;
+          }}
+          title="Закрыть чат"
+          aria-label="Закрыть чат"
+        >
+          ×
+        </button>
       </div>
 
       {/* MESSAGES AREA */}
@@ -207,7 +289,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           display: 'flex', 
           flexDirection: 'column', 
           gap: spacing.sm, 
-          background: colors.gray50 
+          background: colors.gray50,
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${colors.gray300} ${colors.gray50}`,
         }}
       >
         {isLoadingHistory && (
@@ -218,13 +302,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         
         {messagesWithSeparators.map((item) => {
           if ('type' in item) {
-            // Конвертируем UTC время разделителя в локальное время устройства для отображения
             const dateObj = new Date(item.date);
-            const formattedDate = dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+            const formattedDate = dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
             
             return (
               <div key={item.id} style={{ textAlign: 'center', margin: '15px 0' }}>
-                <span style={{ fontSize: '12px', color: colors.gray500, background: colors.gray200, padding: '2px 10px', borderRadius: '10px' }}>
+                <span style={{ 
+                  fontSize: '11px', 
+                  color: colors.gray500, 
+                  background: colors.gray200, 
+                  padding: '4px 12px', 
+                  borderRadius: '12px',
+                  fontWeight: typography.fontWeight.medium,
+                }}>
                   {formattedDate}
                 </span>
               </div>
@@ -232,19 +322,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           }
 
           const isMine = item.username === currentUsername;
-          
-          // Конвертируем UTC время сообщения в локальное время устройства
           const timeObj = new Date(item.createdAt);
           const formattedTime = timeObj.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
           return (
-            <div key={item.id} style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: isMine ? 'flex-end' : 'flex-start',
-              animation: 'fadeIn 0.2s ease-out'
-            }}>
-              {!isMine && <span style={{ fontSize: '11px', color: colors.gray500, marginLeft: '5px' }}>{item.username}</span>}
+            <div 
+              key={item.id} 
+              style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: isMine ? 'flex-end' : 'flex-start',
+                animation: 'fadeIn 0.2s ease-out',
+                maxWidth: '100%',
+              }}
+            >
+              {/* Имя отправителя (для чужих сообщений) */}
+              {!isMine && (
+                <span style={{ 
+                  fontSize: '11px', 
+                  color: colors.gray500, 
+                  marginLeft: '4px',
+                  marginBottom: '2px',
+                  fontWeight: typography.fontWeight.medium,
+                }}>
+                  {item.username}
+                </span>
+              )}
+              
+              {/* Пузырь сообщения */}
               <div style={{ 
                 padding: '8px 12px', 
                 borderRadius: '12px', 
@@ -252,20 +357,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 color: isMine ? colors.white : colors.gray800,
                 boxShadow: shadows.sm,
                 maxWidth: '85%',
-                border: isMine ? 'none' : `1px solid ${colors.gray200}`
+                border: isMine ? 'none' : `1px solid ${colors.gray200}`,
+                wordBreak: 'break-word',
               }}>
-                <div style={{ fontSize: '14px', lineHeight: '1.4', wordBreak: 'break-word' }}>{item.content}</div>
-                <div style={{ fontSize: '10px', opacity: 0.7, textAlign: 'right', marginTop: '2px' }}>
+                <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
+                  {item.content}
+                </div>
+                <div style={{ 
+                  fontSize: '10px', 
+                  opacity: 0.7, 
+                  textAlign: 'right', 
+                  marginTop: '4px',
+                  whiteSpace: 'nowrap',
+                }}>
                   {formattedTime}
                 </div>
               </div>
             </div>
           );
         })}
+        
+        {/* Якорь для прокрутки вниз */}
         <div ref={messagesEndRef} style={{ height: '1px' }} />
       </div>
 
-      {/* КНОПКА "ВНИЗ" */}
+      {/* КНОПКА "НОВЫЕ СООБЩЕНИЯ" */}
       {showNewMessageNotification && (
         <div 
           onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
@@ -284,10 +400,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             zIndex: 10,
             display: 'flex',
             alignItems: 'center',
-            gap: '5px'
+            gap: '6px',
+            transition: `transform ${transitions.fast}, box-shadow ${transitions.fast}`,
+            fontWeight: typography.fontWeight.medium,
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1.05)';
+            e.currentTarget.style.boxShadow = shadows.xl;
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateX(-50%) scale(1)';
+            e.currentTarget.style.boxShadow = shadows.lg;
           }}
         >
-          Новые сообщения ({newMessageCount}) ↓
+          <span>↓</span>
+          Новые сообщения ({newMessageCount})
         </div>
       )}
 
@@ -309,35 +436,100 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           placeholder="Напишите сообщение..."
           style={{ 
             flex: 1, 
-            padding: '12px', 
+            padding: '12px 14px', 
             borderRadius: borderRadius.md, 
             border: `1px solid ${colors.gray300}`, 
             outline: 'none',
-            fontSize: '14px'
+            fontSize: '14px',
+            transition: `border-color ${transitions.fast}, box-shadow ${transitions.fast}`,
+            backgroundColor: colors.white,
+            color: colors.gray900,
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = colors.primary;
+            e.target.style.boxShadow = `0 0 0 3px ${colors.primary}20`;
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = colors.gray300;
+            e.target.style.boxShadow = 'none';
+          }}
+          disabled={!isConnected}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage(e as any);
+            }
           }}
         />
         <button 
           type="submit" 
           disabled={!messageInput.trim() || isSending || !isConnected}
           style={{ 
-            padding: '0 20px', 
+            padding: '0 24px', 
             backgroundColor: colors.primary, 
             color: 'white', 
             border: 'none', 
             borderRadius: borderRadius.md, 
             cursor: 'pointer',
-            fontWeight: '600',
-            opacity: (!messageInput.trim() || isSending) ? 0.6 : 1
+            fontWeight: typography.fontWeight.semibold,
+            fontSize: typography.fontSize.sm,
+            opacity: (!messageInput.trim() || isSending || !isConnected) ? 0.6 : 1,
+            transition: `all ${transitions.fast}`,
+            minWidth: '80px',
+          }}
+          onMouseOver={(e) => {
+            if (messageInput.trim() && !isSending && isConnected) {
+              e.currentTarget.style.backgroundColor = colors.primaryDark;
+            }
+          }}
+          onMouseOut={(e) => {
+            if (messageInput.trim() && !isSending && isConnected) {
+              e.currentTarget.style.backgroundColor = colors.primary;
+            }
           }}
         >
-          {isSending ? '...' : 'Отправить'}
+          {isSending ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ 
+                width: '12px', 
+                height: '12px', 
+                border: '2px solid rgba(255,255,255,0.3)', 
+                borderTopColor: 'white', 
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                display: 'inline-block',
+              }} />
+              ...
+            </span>
+          ) : 'Отправить'}
         </button>
       </form>
 
+      {/* Глобальные стили и анимации */}
       <style>{`
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(5px); }
+          from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        /* Кастомный скроллбар для сообщений */
+        [style*="overflowY: auto"]::-webkit-scrollbar {
+          width: 6px;
+        }
+        [style*="overflowY: auto"]::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        [style*="overflowY: auto"]::-webkit-scrollbar-thumb {
+          background: ${colors.gray300};
+          border-radius: 3px;
+        }
+        [style*="overflowY: auto"]::-webkit-scrollbar-thumb:hover {
+          background: ${colors.gray400};
         }
       `}</style>
     </div>
