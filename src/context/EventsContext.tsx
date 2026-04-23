@@ -22,8 +22,8 @@ export interface CalendarEvent {
   friendIds: string[];
   createdAt: string;
   isInitiator?: boolean;
-  needChat?: boolean; // Флаг: нужен ли чат для этого события
-  chatId?: string | null; // ID чата (может быть null)
+  needChat?: boolean;
+  chatId?: string | null;
 }
 
 interface Notification {
@@ -54,6 +54,9 @@ interface EventsContextType {
   getEventDetails: (eventId: string, includeDeleted?: boolean) => Promise<DetailedEventDto | null>;
   setSelectedEvent: (event: DetailedEventDto | null) => void;
   refetchEvents: () => void;
+  
+  // 🆕 Метод для получения событий другого пользователя
+  getFriendEventsForDate: (friendId: string, date: string) => Promise<CalendarEvent[]>;
 }
 
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
@@ -203,12 +206,10 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [executeWithAuth, showNotification]);
 
-  // 🆕 ОБНОВЛЁННАЯ ФУНКЦИЯ: Создание события с флагом needChat
   const addEvent = useCallback(async (eventData: Omit<CalendarEvent, 'id' | 'createdAt'> & { needChat?: boolean }) => {
     setIsLoading(true);
     
     try {
-      // 🆕 Передаём флаг needChat в API запрос
       const createEventReq: CreateEventRequest = {
         title: eventData.title,
         description: eventData.description,
@@ -222,7 +223,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
         eventsClient.createEvent(token, createEventReq)
       );
       
-      // 🆕 Сохраняем chatId из ответа (если чат был создан)
       const newEvent: CalendarEvent = {
         ...eventData,
         id: response.eventId,
@@ -235,11 +235,9 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       setEvents(prev => [...prev, newEvent]);
       setInitiatorEvents(prev => [...prev, newEvent]);
       
-      // Перезагружаем события месяца
       const eventDate = new Date(eventData.date);
       await fetchAllEventsForMonth(eventDate.getFullYear(), eventDate.getMonth());
       
-      // 🆕 Показываем разное уведомление в зависимости от наличия чата
       if (eventData.needChat && response.chatId) {
         showNotification('success', 'Встреча и чат созданы');
       } else {
@@ -337,6 +335,37 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     setSelectedEventState(event);
   }, []);
 
+  // 🆕 Метод для получения событий другого пользователя (друга)
+  const getFriendEventsForDate = useCallback(async (friendId: string, date: string): Promise<CalendarEvent[]> => {
+    if (!userId) return [];
+    
+    try {
+      const targetDate = new Date(date);
+      const startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0);
+      const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59);
+
+      const request: SearchEventsRequest = {
+        startAt: startDate.toISOString(),
+        endAt: endDate.toISOString(),
+        memberId: friendId,
+        status: 'Accepted',
+        pageSize: 100,
+        pageNumber: 1
+      };
+
+      const response = await executeWithAuth(token =>
+        eventsClient.searchEvents(token, request)
+      );
+
+      return (response.events || []).map(event => 
+        convertApiEventToCalendarEvent(event, false)
+      );
+    } catch (err) {
+      console.error('Failed to fetch friend events:', err);
+      return [];
+    }
+  }, [userId, executeWithAuth]);
+
   return (
     <EventsContext.Provider value={{
       events,
@@ -359,6 +388,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       getEventDetails,
       setSelectedEvent,
       refetchEvents,
+      getFriendEventsForDate,
     }}>
       {children}
     </EventsContext.Provider>

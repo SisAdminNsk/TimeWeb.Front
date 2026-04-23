@@ -6,6 +6,7 @@ import { ToastContainer } from '../components/ToastContainer';
 import ChatWindow from '../components/ChatWindow';
 import { usePersonalChatOpener } from '../hooks/UsePersonalChatOpener';
 import { theme } from '../styles/theme';
+import { FriendScheduleModal } from '../components/FriendScheduleModal';
 
 type SectionType = 'friends' | 'incoming' | 'outgoing' | 'add';
 
@@ -67,6 +68,13 @@ export const FriendsPage = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activePersonalChat, setActivePersonalChat] = useState<ActivePersonalChat | null>(null);
+  
+  // 🆕 Состояние для модального окна расписания
+  const [scheduleModal, setScheduleModal] = useState<{
+    isOpen: boolean;
+    friendId: string | null;
+    friendName: string | null;
+  }>({ isOpen: false, friendId: null, friendName: null });
 
   useEffect(() => {
     const handleResize = () => {
@@ -362,8 +370,7 @@ export const FriendsPage = () => {
           <div style={listStyle}>
             {friendsList.map((friend) => {
               const friendName = getFriendName(friend);
-              const isDisabled = isChatLoading || isLoading;
-              
+        
               return (
                 <div key={friend.friendId} style={isMobile ? listItemMobileStyle : listItemStyle}>
                   <div style={listItemLeftStyle}>
@@ -388,8 +395,31 @@ export const FriendsPage = () => {
                   
                   <div style={isMobile ? actionButtonsMobileStyle : actionButtonsStyle}>
                     
+                    {/* 🔥 Кнопка "Расписание" */}
                     <button 
-                      style={getActionButtonStyle('chat', isDisabled)}
+                      style={getActionButtonStyle('secondary', isLoading)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setScheduleModal({
+                          isOpen: true,
+                          friendId: friend.friendId,
+                          friendName: friendName,
+                        });
+                      }}
+                      disabled={isLoading}
+                      title="Посмотреть расписание"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                      {isMobile ? 'Расп.' : 'Расписание'}
+                    </button>
+                    
+                    <button 
+                      style={getActionButtonStyle('chat', isChatLoading || isLoading)}
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
@@ -404,7 +434,7 @@ export const FriendsPage = () => {
                           console.error('Failed to open chat:', err);
                         }
                       }}
-                      disabled={isDisabled}
+                      disabled={isChatLoading || isLoading}
                       title="Открыть чат"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
@@ -678,6 +708,14 @@ export const FriendsPage = () => {
           </div>
         </div>
       )}
+      
+      {/* 🔥 Модальное окно с расписанием друга */}
+      <FriendScheduleModal
+        isOpen={scheduleModal.isOpen}
+        friendId={scheduleModal.friendId || ''}
+        friendName={scheduleModal.friendName || ''}
+        onClose={() => setScheduleModal({ isOpen: false, friendId: null, friendName: null })}
+      />
       
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

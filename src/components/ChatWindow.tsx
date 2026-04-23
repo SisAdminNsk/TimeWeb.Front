@@ -40,8 +40,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onClose,
   currentUsername,
   chatTitle,
-  isPersonal = false,
-  participantId,
+  isPersonal = false
 }) => {
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   const [messageInput, setMessageInput] = useState('');

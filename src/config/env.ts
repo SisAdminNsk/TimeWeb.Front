@@ -3,6 +3,7 @@ export interface AppConfig {
   friendsApiUrl: string;
   eventsApiUrl: string;
   chatsApiUrl: string,
+  captchaSiteKey: string,
   appName: string;
   isDevelopment: boolean;
   isProduction: boolean;
@@ -13,6 +14,7 @@ export const config: AppConfig = {
   friendsApiUrl: import.meta.env.VITE_FRIENDS_API_URL,
   eventsApiUrl: import.meta.env.VITE_EVENTS_API_URL,
   chatsApiUrl: import.meta.env.VITE_CHATS_API_URL,
+  captchaSiteKey: import.meta.env.VITE_CAPTCHA_SITE_KEY,
   appName: import.meta.env.VITE_APP_NAME,
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
@@ -32,4 +34,8 @@ if (!config.eventsApiUrl) {
 
 if (!config.chatsApiUrl) {
   console.error('VITE_CHATS_API_URL не настроен');
+}
+
+if(!config.captchaSiteKey){
+  console.error('VITE_CAPTCHA_SITE_KEY не настроен');
 }

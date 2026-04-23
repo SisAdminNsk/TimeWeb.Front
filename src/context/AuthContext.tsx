@@ -3,16 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { usersClient } from '../api/users/UsersClient';
 import type { ApiError } from '../api/ApiError';
-import { getIdFromJwt } from '../common/JwtHelper'
+import { getIdFromJwt } from '../common/JwtHelper';
+import type { 
+  BindEmailRequest, BindEmailResponse, 
+  EndBindEmailRequest, EndBindEmailResponse 
+} from '../api/users/UsersContracts';
 
-interface UserInfo {
+export interface UserInfo {
   accessToken: string;
   refreshToken: string;
   name: string;
+  email: string | null;
+  emailChangedDate: string | null;
+  passwordChangedDate: string | null;
   registrationDate: string;
 }
 
-interface AuthContext {
+export interface AuthContext {
   user: UserInfo | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -25,6 +32,9 @@ interface AuthContext {
   handleUnauthorized: (error: ApiError) => boolean;
   lastError: ApiError | null;
   clearError: () => void;
+  bindEmail: (request: BindEmailRequest) => Promise<BindEmailResponse>;
+  endBindEmail: (request: EndBindEmailRequest) => Promise<EndBindEmailResponse>;
+  updateUserEmail: (newEmail: string, emailChangedDate: string) => void;
 }
 
 const userSession = 'user_session';
@@ -38,7 +48,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [lastError, setLastError] = useState<ApiError | null>(null);
   
   const refreshPromise = useRef<Promise<void> | null>(null);
-  // Ref для предотвращения параллельных вызовов logout
   const logoutPromise = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
@@ -62,45 +71,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   }, []);
 
-  const logout = useCallback(async (reason: 'unauthorized' | 'user' = 'user') => {
-    // Если уже идет процесс logout, ждем его
-    if (logoutPromise.current) {
-      return logoutPromise.current;
+  // === ОБНОВЛЕНИЕ ПОЧТЫ В КОНТЕКСТЕ ===
+  const updateUserEmail = useCallback((newEmail: string, emailChangedDate: string): void => {
+    const current = getSession();
+    if (current) {
+      const updated: UserInfo = {
+        ...current,
+        email: newEmail,
+        emailChangedDate,
+      };
+      saveSession(updated);
     }
+  }, [getSession, saveSession]);
+
+  const logout = useCallback(async (reason: 'unauthorized' | 'user' = 'user') => {
+    if (logoutPromise.current) return logoutPromise.current;
 
     logoutPromise.current = (async () => {
       const session = getSession();
       
-      // Пытаемся сделать logout через API
       if (session?.accessToken) {
         try {
           await usersClient.logoutMe(session.accessToken);
         } catch (error: any) {
-          // Если получили 401, пробуем refresh и повторяем logout
           if (error?.statusCode === 401 && session?.refreshToken) {
             try {
-              // Пробуем получить новые токены
               const refreshResponse = await usersClient.refresh({ token: session.refreshToken });
-              
-              // Пытаемся logout с новым токеном
               try {
                 await usersClient.logoutMe(refreshResponse.accessToken);
-              } catch (logoutError) {
-                // Второй logout тоже не удался - игнорируем, всё равно выходим
-                console.warn('Logout after refresh failed:', logoutError);
-              }
-            } catch (refreshError) {
-              // Refresh не удался - игнорируем, всё равно выходим
-              console.warn('Refresh during logout failed:', refreshError);
-            }
-          } else {
-            // Другая ошибка (не 401) - игнорируем, всё равно выходим
-            console.warn('Logout API call failed:', error);
+              } catch { /* ignore */ }
+            } catch { /* ignore */ }
           }
         }
       }
 
-      // Всегда очищаем сессию независимо от результата API вызовов
       clearSession();
       setUser(null);
       refreshPromise.current = null;
@@ -118,16 +122,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const getToken = useCallback((): string => {
     const session = getSession();
-    if (!session?.accessToken) {
-      throw new Error('User not authenticated: no token available');
-    }
+    if (!session?.accessToken) throw new Error('User not authenticated: no token available');
     return session.accessToken;
   }, [getSession]);
 
   const refreshTokens = useCallback(async (): Promise<void> => {
-    if (refreshPromise.current) {
-      return refreshPromise.current;
-    }
+    if (refreshPromise.current) return refreshPromise.current;
 
     const session = getSession();
     if (!session?.refreshToken) {
@@ -143,7 +143,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           accessToken: response.accessToken,
           refreshToken: response.refreshToken,
         };
-        
         saveSession(newSession);
       } catch (error) {
         await logout('unauthorized');
@@ -180,12 +179,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const signInResponse = await usersClient.signIn({ username, password });
       const accessToken = signInResponse.accessToken;
-      const getUserResponse = await usersClient.getUser(accessToken, getIdFromJwt(accessToken))
+      const getUserResponse = await usersClient.getUser(accessToken, getIdFromJwt(accessToken));
 
       const session: UserInfo = {
         accessToken: signInResponse.accessToken,
         refreshToken: signInResponse.refreshToken,
         name: username,
+        email: getUserResponse.user.email,
+        emailChangedDate: getUserResponse.user.emailChangedDate,
+        passwordChangedDate: getUserResponse.user.passwordChangedDate,
         registrationDate: getUserResponse.user.createdAt
       };
       saveSession(session);
@@ -194,10 +196,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!err.getFieldError) {
         setLastError({
           errorCode: err.name === 'AbortError' ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
-          errorMessage:
-            err.name === 'AbortError'
-              ? 'Превышено время ожидания ответа от сервера (10 сек)'
-              : err.message || 'Сервер недоступен. Проверьте подключение.',
+          errorMessage: err.name === 'AbortError'
+            ? 'Превышено время ожидания ответа от сервера (10 сек)'
+            : err.message || 'Сервер недоступен. Проверьте подключение.',
           statusCode: 0,
           getFieldError: () => undefined,
           getFieldErrors: () => undefined,
@@ -220,10 +221,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!err.getFieldError) {
         setLastError({
           errorCode: err.name === 'AbortError' ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
-          errorMessage:
-            err.name === 'AbortError'
-              ? 'Превышено время ожидания ответа от сервера (10 сек)'
-              : err.message || 'Сервер недоступен. Проверьте подключение.',
+          errorMessage: err.name === 'AbortError'
+            ? 'Превышено время ожидания ответа от сервера (10 сек)'
+            : err.message || 'Сервер недоступен. Проверьте подключение.',
           statusCode: 0,
           getFieldError: () => undefined,
           getFieldErrors: () => undefined,
@@ -236,6 +236,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsSubmitting(false);
     }
   };
+
+  const bindEmail = useCallback(async (request: BindEmailRequest): Promise<BindEmailResponse> => {
+    const token = getToken();
+    return await usersClient.bindEmail(token, request);
+  }, [getToken]);
+
+  const endBindEmail = useCallback(async (request: EndBindEmailRequest): Promise<EndBindEmailResponse> => {
+    const token = getToken();
+    return await usersClient.endBindEmail(token, request);
+  }, [getToken]);
+
 
   const clearError = useCallback(() => setLastError(null), []);
 
@@ -262,6 +273,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         handleUnauthorized,
         lastError,
         clearError,
+        // === Новые методы ===
+        bindEmail,
+        endBindEmail,
+        updateUserEmail,
       }}
     >
       {children}

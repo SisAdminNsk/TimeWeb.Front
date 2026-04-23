@@ -25,6 +25,9 @@ export interface CheckUserExistenceResponse{
 export interface UserDto{
   id: string,
   name: string,
+  email: string | null,
+  emailChangedDate: string | null,
+  passwordChangedDate: string | null,
   createdAt: string
 }
 
@@ -38,23 +41,6 @@ export interface GetUsersRequest{
 
 export interface GetUsersResponse{
   users: UserDto[]
-}
-
-export interface GetProfileResponse{
-  profile: ProfileDto
-}
-
-export interface ProfileDto {
-    userId: string;
-    attributes: Record<string, string>;
-}
-
-export interface UpdateProfileRequest {
-    profileAttributes: Record<string, string>;
-}
-
-export interface UpdateProfileResponse {
-    profile: ProfileDto;
 }
 
 export interface RefreshTokenRequest{
@@ -101,8 +87,43 @@ export interface UserLastSeenDto{
     lastSeenAt: string | null
 }
 
-export const PROFILE_ATTRIBUTES = {
-  Email: 'base/email',
-  Birthdate: 'base/birthdate',
-  Gender: 'base/gender',
-} as const;
+export interface RecoverAccountRequest{
+  email: string,
+  captchaToken: string,
+}
+
+export interface RecoverAccountResponse{
+  verificationId: string
+}
+
+export interface EndRecoverAccountRequest{
+  verificationId: string,
+  confirmationCode: string
+}
+
+export interface EndRecoverAccountResponse{
+  resetToken: string
+}
+
+export interface ResetPasswordRequest{
+  resetToken: string,
+  newPassword: string
+}
+
+export interface BindEmailRequest{
+  newEmail: string
+  accountPassword: string
+}
+
+export interface BindEmailResponse{
+  verificationId: string
+}
+
+export interface EndBindEmailRequest{
+  verificationId: string,
+  confirmationCode: string
+}
+
+export interface EndBindEmailResponse{
+  emailChangedDate: string
+}

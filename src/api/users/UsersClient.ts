@@ -7,15 +7,21 @@ import type {
   GetUserResponse,
   GetUsersResponse,
   GetUsersRequest,
-  GetProfileResponse,
-  UpdateProfileRequest,
-  UpdateProfileResponse,
   RefreshTokenRequest,
   RefreshTokenResponse,
   GetLoginsResponse,
   ChangePasswordRequest,
   GetUsersLastSeenResponse,
-  GetUsersLastSeenRequest
+  GetUsersLastSeenRequest,
+  RecoverAccountRequest,
+  RecoverAccountResponse,
+  EndRecoverAccountRequest,
+  EndRecoverAccountResponse,
+  ResetPasswordRequest,
+  BindEmailRequest,
+  BindEmailResponse,
+  EndBindEmailRequest,
+  EndBindEmailResponse
 } from './UsersContracts';
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
@@ -70,25 +76,6 @@ export const usersClient = {
       body: JSON.stringify(request)
     });
     return handleResponse<GetUsersResponse>(response);
-  },
-
-   getProfile: async (authToken: string, userId: string): Promise<GetProfileResponse> => {
-    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/profiles/${userId}`, {
-      method: 'GET',
-      headers: {'Authorization': `Bearer ${authToken}`}
-    });
-    return handleResponse<GetProfileResponse>(response);
-  },
-
-  updateProfile: async (authToken: string, userId: string, request: UpdateProfileRequest): Promise<UpdateProfileResponse> => {
-    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/users/profiles/${userId}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'},
-      body: JSON.stringify(request)
-    });
-    return handleResponse<UpdateProfileResponse>(response);
   },
 
   refresh: async (request: RefreshTokenRequest):  Promise<RefreshTokenResponse> => {
@@ -169,6 +156,73 @@ export const usersClient = {
     });
   
     return handleResponse<void>(response);
+  },
+
+  recoverAccount: async (request: RecoverAccountRequest): Promise<RecoverAccountResponse> => {
+    
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/recover`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+  
+    return handleResponse<RecoverAccountResponse>(response);
+  },
+
+  endRecoverAccount: async (request: EndRecoverAccountRequest): Promise<EndRecoverAccountResponse> => {
+    
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/end-recover`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+  
+    return handleResponse<EndRecoverAccountResponse>(response);
+  },
+
+  resetPassword: async (request: ResetPasswordRequest): Promise<void> => {
+    
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+  
+    return handleResponse<void>(response);
+  },
+
+  bindEmail: async (authToken: string, request: BindEmailRequest): Promise<BindEmailResponse> => {
+    
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/bind-email`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+  
+    return handleResponse<BindEmailResponse>(response);
+  },
+
+  endBindEmail: async (authToken: string, request: EndBindEmailRequest): Promise<EndBindEmailResponse> => {
+    
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/end-bind-email`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request)
+    });
+  
+    return handleResponse<EndBindEmailResponse>(response);
   },
 
   getUsersLastSeen: async (authToken: string, request: GetUsersLastSeenRequest): Promise<GetUsersLastSeenResponse> => {
