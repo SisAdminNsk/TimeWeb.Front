@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCabinet } from '../context/CabinetContext';
 import { useAuth } from '../context/AuthContext';
 import { useEvents } from '../context/EventsContext';
 import { theme } from '../styles/theme';
+import { config } from '../config/env';
 import type { SessionDto } from '../api/users/UsersContracts';
 import type { BindEmailRequest, EndBindEmailRequest } from '../api/users/UsersContracts';
+import ReCAPTCHA from 'react-google-recaptcha';
+
+const captchaSiteKey = config.captchaSiteKey;
 
 // === Утилиты ===
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -349,9 +353,12 @@ const ChangeEmailModal: React.FC<{
   onCancel: () => void; 
   onResendCode: () => void; 
   onStepBack: () => void;
-}> = ({ isOpen, step, newEmail, verificationCode, currentPassword, error, isSubmitting, resendTimer, styles, onNewEmailChange, onPasswordChange, onCodeChange, onSubmit, onCancel, onResendCode, onStepBack }) => {
+  captchaToken: string | null;
+  setCaptchaToken: (t: string | null) => void;
+  captchaRef: React.RefObject<ReCAPTCHA | null>;
+}> = ({ isOpen, step, newEmail, verificationCode, currentPassword, error, isSubmitting, resendTimer, styles, onNewEmailChange, onPasswordChange, onCodeChange, onSubmit, onCancel, onResendCode, onStepBack, captchaToken, setCaptchaToken, captchaRef }) => {
   if (!isOpen) return null;
-  const { colors, typography } = theme;
+  const { colors, typography, spacing } = theme;
 
   return (
   <div style={styles.modalOverlay} onClick={onCancel}>
@@ -383,7 +390,7 @@ const ChangeEmailModal: React.FC<{
       ) : (
         <><p style={styles.modalMessage}>Для смены почты введите текущий пароль и новую почту</p>
         <div style={{ marginBottom: 16 }}><label style={styles.infoLabel}>Текущий пароль</label><input type="password" value={currentPassword} onChange={(e) => onPasswordChange(e.target.value)} disabled={isSubmitting} placeholder="Введите пароль от аккаунта" style={styles.fieldInput} onFocus={(e) => { e.currentTarget.style.outline = 'none'; e.currentTarget.style.borderColor = '#3b82f6'; }} onBlur={(e) => { e.currentTarget.style.borderColor = '#d1d5db'; }} /></div>
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: spacing.md }}>
           <label style={styles.infoLabel}>Новая почта</label>
           <input 
             type="email" 
@@ -400,9 +407,42 @@ const ChangeEmailModal: React.FC<{
           />
           {newEmail && !isValidEmail(newEmail) && <div style={styles.errorText}>Введите корректный email адрес</div>}
         </div>
+        
+        {/* === CAPTCHA === */}
+        <div style={{ 
+          marginBottom: spacing.lg, 
+          display: 'flex', 
+          justifyContent: 'center',
+          opacity: isSubmitting ? 0.6 : 1,
+          pointerEvents: isSubmitting ? 'none' : 'auto'
+        }}>
+          <ReCAPTCHA
+            ref={captchaRef}
+            sitekey={captchaSiteKey || ''}
+            onChange={setCaptchaToken}
+            onExpired={() => setCaptchaToken(null)}
+            onErrored={() => {
+              // Обработчик ошибки загрузки капчи
+            }}
+            size="normal"
+            theme="light"
+            tabIndex={0}
+          />
+        </div>
+        
+        {!captchaToken && error?.includes('робот') && (
+          <div style={{ ...styles.errorText, textAlign: 'center', marginBottom: spacing.sm }}>
+            ⚠️ Пожалуйста, пройдите проверку безопасности
+          </div>
+        )}
+        
         <div style={styles.modalActions}>
           <button style={styles.modalBtnCancel} onClick={onCancel} disabled={isSubmitting}>Отмена</button>
-          <button style={styles.modalBtnPrimary} onClick={onSubmit} disabled={isSubmitting || !isValidEmail(newEmail) || !currentPassword}>
+          <button 
+            style={styles.modalBtnPrimary} 
+            onClick={onSubmit} 
+            disabled={isSubmitting || !isValidEmail(newEmail) || !currentPassword || !captchaToken}
+          >
             {isSubmitting ? 'Отправка...' : 'Отправить код'}
           </button>
         </div></>
@@ -453,6 +493,10 @@ export const CabinetPage = () => {
     resendTimer: 0
   });
 
+  // === CAPTCHA для смены почты ===
+  const [changeEmailCaptchaToken, setChangeEmailCaptchaToken] = useState<string | null>(null);
+  const changeEmailCaptchaRef = useRef<ReCAPTCHA>(null);
+
   const styles = useMemo(() => createStyles(themeData, isMobile), [isMobile]);
 
   useEffect(() => { const handleResize = () => { const m = window.innerWidth < 768; setIsMobile(m); if (!m) setIsSidebarOpen(true); }; handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize); }, []);
@@ -460,6 +504,14 @@ export const CabinetPage = () => {
 
   // Таймер resend
   useEffect(() => { if (changeEmailModal.resendTimer > 0) { const t = setTimeout(() => setChangeEmailModal(p => ({ ...p, resendTimer: p.resendTimer - 1 })), 1000); return () => clearTimeout(t); } }, [changeEmailModal.resendTimer]);
+
+  // Сброс капчи при закрытии модалки или смене шага
+  useEffect(() => {
+    if (!changeEmailModal.isOpen || changeEmailModal.step !== 'initial') {
+      setChangeEmailCaptchaToken(null);
+      changeEmailCaptchaRef.current?.reset();
+    }
+  }, [changeEmailModal.isOpen, changeEmailModal.step]);
 
   const loadSessions = async (page: number) => { setSessionsLoading(true); setSessionsError(null); try { const r = await getUserSessions(10, page, false); setSessions(r.logins || []); setTotalSessions(r.totalCount || 0); } catch { setSessionsError('Не удалось загрузить данные о сессиях'); } finally { setSessionsLoading(false); } };
 
@@ -491,23 +543,33 @@ export const CabinetPage = () => {
   
   const handleEmailModalChange = (field: 'newEmail' | 'currentPassword' | 'verificationCode', value: string) => setChangeEmailModal(p => ({ ...p, [field]: value, error: '' }));
   
-  const handleEmailStepBack = () => setChangeEmailModal(p => ({ 
-    ...p, 
-    step: 'initial', 
-    verificationCode: '', 
-    verificationId: null,
-    error: '' 
-  }));
+  const handleEmailStepBack = () => {
+    setChangeEmailCaptchaToken(null);
+    changeEmailCaptchaRef.current?.reset();
+    setChangeEmailModal(p => ({ 
+      ...p, 
+      step: 'initial', 
+      verificationCode: '', 
+      verificationId: null,
+      error: '' 
+    }));
+  };
 
   const handleSendVerificationCode = async () => {
     const { newEmail, currentPassword } = changeEmailModal;
     if (!isValidEmail(newEmail)) { setChangeEmailModal(p => ({ ...p, error: 'Введите корректный email адрес' })); return; }
     if (!currentPassword) { setChangeEmailModal(p => ({ ...p, error: 'Введите текущий пароль' })); return; }
     
+    // === Валидация CAPTCHA ===
+    if (!changeEmailCaptchaToken) { 
+      setChangeEmailModal(p => ({ ...p, error: 'Пожалуйста, подтвердите, что вы не робот' })); 
+      return; 
+    }
+    
     setChangeEmailModal(p => ({ ...p, isSubmitting: true, error: '' }));
     
     try {
-      const request: BindEmailRequest = { newEmail, accountPassword: currentPassword };
+      const request: BindEmailRequest = { newEmail, accountPassword: currentPassword, captchaToken: changeEmailCaptchaToken };
       const response = await bindEmail(request);
       
       setChangeEmailModal(p => ({ 
@@ -517,7 +579,18 @@ export const CabinetPage = () => {
         isSubmitting: false, 
         resendTimer: 180 
       }));
+      
+      // Сброс капчи после успешной отправки
+      setChangeEmailCaptchaToken(null);
+      changeEmailCaptchaRef.current?.reset();
+      
     } catch (err: any) {
+      // Сброс капчи при ошибке 400 (валидация)
+      if (err?.statusCode === 400) {
+        setChangeEmailCaptchaToken(null);
+        changeEmailCaptchaRef.current?.reset();
+      }
+      
       const sc = err?.statusCode || err?.status || 500;
       let msg = 'Произошла ошибка. Попробуйте снова.';
       if (sc === 400) msg = 'Ошибка валидации. Проверьте данные.';
@@ -531,7 +604,13 @@ export const CabinetPage = () => {
   };
 
   const handleResendEmailCode = async () => { 
-    if (changeEmailModal.resendTimer === 0) await handleSendVerificationCode(); 
+    if (changeEmailModal.resendTimer === 0) {
+      if (!changeEmailCaptchaToken) {
+        setChangeEmailModal(p => ({ ...p, error: 'Пожалуйста, пройдите проверку безопасности' }));
+        return;
+      }
+      await handleSendVerificationCode(); 
+    }
   };
 
   const handleConfirmEmailChange = async () => {
@@ -623,8 +702,12 @@ export const CabinetPage = () => {
         onCancel={handleEmailModalCancel} 
         onResendCode={handleResendEmailCode} 
         onStepBack={handleEmailStepBack}
+        // CAPTCHA props
+        captchaToken={changeEmailCaptchaToken}
+        setCaptchaToken={setChangeEmailCaptchaToken}
+        captchaRef={changeEmailCaptchaRef}
       />
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}button:focus{outline:none!important}input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer}table tbody tr:hover{background-color:#f9fafb}@media(max-width:767px){input,select,textarea{font-size:16px!important}}.timeline-event:hover{filter:brightness(0.95);transform:translateY(-1px);z-index:10}.timeline-scroll-container::-webkit-scrollbar{width:6px;height:6px}.timeline-scroll-container::-webkit-scrollbar-track{background:transparent;border-radius:4px}.timeline-scroll-container::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}.timeline-scroll-container::-webkit-scrollbar-thumb:hover{background:#94a3b8}.timeline-scroll-container{scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}`}</style>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}button:focus{outline:none!important}input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer}table tbody tr:hover{background-color:#f9fafb}@media(max-width:767px){input,select,textarea{font-size:16px!important}}.timeline-event:hover{filter:brightness(0.95);transform:translateY(-1px);z-index:10}.timeline-scroll-container::-webkit-scrollbar{width:6px;height:6px}.timeline-scroll-container::-webkit-scrollbar-track{background:transparent;border-radius:4px}.timeline-scroll-container::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}.timeline-scroll-container::-webkit-scrollbar-thumb:hover{background:#94a3b8}.timeline-scroll-container{scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}.g-recaptcha > div { margin: 0 auto; }@media (max-width: 767px) { .g-recaptcha { transform: scale(0.9); transform-origin: left center; } }`}</style>
     </div>
   );
 };

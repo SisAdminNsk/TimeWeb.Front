@@ -8,6 +8,7 @@ import EventModal from '../components/EventModal';
 const tabTypes = [
   { key: 'NewEvent', label: 'Новые встречи' },
   { key: 'EventDeclined', label: 'Отмененные встречи' },
+    { key: 'EventUpdated', label: 'Изменения по встречам' }
 ];
 
 const blinkKeyframes = `
@@ -65,6 +66,10 @@ export const NotificationsPage: React.FC = () => {
   const [eventDetailsCache, setEventDetailsCache] = useState<Record<string, DetailedEventDto>>({});
 
   const handleCardClick = (notification: NotificationDto) => {
+    // 🔹 Не открываем модальное окно для событий, где пользователя исключили
+    if (type === 'EventUpdated') {
+      return;
+    }
     setSelectedNotification(notification);
     setIsModalOpen(true);
   };
@@ -77,9 +82,8 @@ export const NotificationsPage: React.FC = () => {
   useEffect(() => {
     const loadEventDetails = async () => {
       const newCache = { ...eventDetailsCache };
-      // Определяем includeDeleted на основе текущего типа уведомления
-      // Для вкладки "Отмененные встречи" (EventDeclined) используем includeDeleted = true
-      const includeDeleted = type === 'EventDeclined';
+      // Для EventDeclined и EventUpdated загружаем с includeDeleted = true
+      const includeDeleted = type === 'EventDeclined' || type === 'EventUpdated';
       
       for (const notification of notifications) {
         if (!newCache[notification.eventId]) {
@@ -218,10 +222,13 @@ export const NotificationsPage: React.FC = () => {
                 const isNew = newNotificationIds.has(notificationId);
                 const eventDetails = eventDetailsCache[n.eventId];
                 
+                // 🔹 Определяем, можно ли кликать по карточке
+                const isClickable = type !== 'EventUpdated';
+                
                 return (
                   <li
                     key={notificationId}
-                    onClick={() => handleCardClick(n)}
+                    onClick={() => isClickable && handleCardClick(n)}
                     style={{
                       marginBottom: spacing.md,
                       background: colors.white,
@@ -232,14 +239,17 @@ export const NotificationsPage: React.FC = () => {
                       transition: `all ${transitions.normal}`,
                       position: 'relative',
                       opacity: isLoading ? 0.9 : 1,
-                      cursor: 'pointer',
+                      cursor: isClickable ? 'pointer' : 'default', // 🔹 Меняем курсор для некликабельных
                     }}
                     onMouseEnter={(e) => {
+                      // 🔹 Не применяем ховер-эффекты для некликабельных карточек
+                      if (!isClickable) return;
                       e.currentTarget.style.boxShadow = shadows.md;
                       e.currentTarget.style.borderColor = colors.primary;
                       e.currentTarget.style.transform = 'translateY(-2px)';
                     }}
                     onMouseLeave={(e) => {
+                      if (!isClickable) return;
                       e.currentTarget.style.boxShadow = shadows.sm;
                       e.currentTarget.style.borderColor = colors.gray200;
                       e.currentTarget.style.transform = 'translateY(0)';
@@ -370,7 +380,7 @@ export const NotificationsPage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* ТОЛЬКО для вкладки "Отменные встречи" - информация об удалении */}
+                    {/* 🔹 ТОЛЬКО для вкладки "Отмененные встречи" - информация об удалении */}
                     {type === 'EventDeclined' && eventDetails && (
                       <div style={{
                         display: 'inline-flex',
@@ -381,8 +391,8 @@ export const NotificationsPage: React.FC = () => {
                       }}>
                         <span style={{
                           display: 'inline-block',
-                          backgroundColor: colors.gray200,
-                          color: colors.gray700,
+                          backgroundColor: colors.error,
+                          color: colors.white,
                           padding: `${spacing.xs} ${spacing.sm}`,
                           borderRadius: borderRadius.full,
                           fontSize: typography.fontSize.xs,
@@ -400,9 +410,38 @@ export const NotificationsPage: React.FC = () => {
                         )}
                       </div>
                     )}
+
+                    {/* 🔹 ТОЛЬКО для вкладки "Изменения по событиям" - информация об исключении */}
+                    {type === 'EventUpdated' && eventDetails && (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: spacing.sm,
+                        marginTop: spacing.md,
+                        flexWrap: 'wrap',
+                      }}>
+                        <span style={{
+                          display: 'inline-block',
+                          backgroundColor: colors.warning,
+                          color: colors.gray900,
+                          padding: `${spacing.xs} ${spacing.sm}`,
+                          borderRadius: borderRadius.full,
+                          fontSize: typography.fontSize.xs,
+                          fontWeight: typography.fontWeight.semibold,
+                        }}>
+                          Вы исключены
+                        </span>
+                        <span style={{
+                          fontSize: typography.fontSize.xs,
+                          color: colors.gray600,
+                        }}>
+                          • Вас больше нет в списке участников этого события
+                        </span>
+                      </div>
+                    )}
                     
-                    {/* Кнопки действия - ТОЛЬКО для "Новые встречи" и "Изменения" */}
-                    {type !== 'EventDeclined' && (
+                    {/* 🔹 Кнопки действия - ТОЛЬКО для "Новые встречи" */}
+                    {type === 'NewEvent' && (
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',

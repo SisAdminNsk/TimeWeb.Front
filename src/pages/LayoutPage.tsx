@@ -307,7 +307,7 @@ export const LayoutPage = () => {
             <span style={menuBarStyle} />
           </button>
           <h2 style={{ ...logoTextStyle, margin: 0, fontSize: typography.fontSize.lg }}>
-            TimeWeb
+            Веб-Ивент
           </h2>
           <div style={{ width: '40px' }} />
         </header>
@@ -317,7 +317,7 @@ export const LayoutPage = () => {
         {!isMobile && (
           <div style={logoStyle}>
             <div>
-              <h2 style={logoTextStyle}>TimeWeb</h2>
+              <h2 style={logoTextStyle}>Веб-Ивент</h2>
             </div>
           </div>
         )}

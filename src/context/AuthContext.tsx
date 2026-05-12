@@ -10,6 +10,7 @@ import type {
 } from '../api/users/UsersContracts';
 
 export interface UserInfo {
+  id: string;
   accessToken: string;
   refreshToken: string;
   name: string;
@@ -182,6 +183,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const getUserResponse = await usersClient.getUser(accessToken, getIdFromJwt(accessToken));
 
       const session: UserInfo = {
+        id: signInResponse.userId,
         accessToken: signInResponse.accessToken,
         refreshToken: signInResponse.refreshToken,
         name: username,

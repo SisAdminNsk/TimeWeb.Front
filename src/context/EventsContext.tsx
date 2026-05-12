@@ -1,4 +1,3 @@
-// context/EventsContext.tsx
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { eventsClient } from '../api/events/EventsClient';
@@ -47,6 +46,8 @@ interface EventsContextType {
   getEventsForDate: (date: string) => CalendarEvent[];
   hasEventsOnDate: (date: string) => boolean;
   isEventInitiator: (eventId: string) => boolean;
+  removeMember: (eventId: string, memberId: string) => Promise<void>;
+  addMemberToEvent: (eventId: string, memberId: string) => Promise<void>; // 🆕
   clearNotification: () => void;
   
   fetchEventsForMonth: (year: number, month: number) => Promise<void>;
@@ -55,7 +56,6 @@ interface EventsContextType {
   setSelectedEvent: (event: DetailedEventDto | null) => void;
   refetchEvents: () => void;
   
-  // 🆕 Метод для получения событий другого пользователя
   getFriendEventsForDate: (friendId: string, date: string) => Promise<CalendarEvent[]>;
 }
 
@@ -179,6 +179,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       setInitiatorEvents(convertedEvents);
     } catch (err) {
       console.error('Failed to fetch initiator events from API:', err);
+    } finally {
+      setIsLoading(false);
     }
   }, [userId, executeWithAuth, showNotification]);
 
@@ -335,7 +337,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     setSelectedEventState(event);
   }, []);
 
-  // 🆕 Метод для получения событий другого пользователя (друга)
   const getFriendEventsForDate = useCallback(async (friendId: string, date: string): Promise<CalendarEvent[]> => {
     if (!userId) return [];
     
@@ -366,6 +367,49 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [userId, executeWithAuth]);
 
+  const removeMember = useCallback(async (eventId: string, memberId: string): Promise<void> => {
+    try {
+      await executeWithAuth(token =>
+        eventsClient.removeMember(token, eventId, memberId)
+      );
+      showNotification('success', 'Участник успешно удалён');
+      
+      if (selectedEvent?.eventId === eventId) {
+        await getEventDetails(eventId);
+      }
+      
+      refetchEvents();
+    } catch (err) {
+      console.error('Failed to remove member:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка при удалении участника';
+      showNotification('error', errorMessage);
+      throw err;
+    }
+  }, [executeWithAuth, showNotification, selectedEvent, getEventDetails, refetchEvents]);
+
+  // 🆕 Метод для добавления участника в событие (отправка приглашения)
+  const addMemberToEvent = useCallback(async (eventId: string, memberId: string): Promise<void> => {
+    try {
+      await executeWithAuth(token =>
+        eventsClient.addMember(token, eventId, memberId)
+      );
+      showNotification('success', 'Приглашение отправлено');
+      
+      // 🔄 Обновляем детали события, если они открыты
+      if (selectedEvent?.eventId === eventId) {
+        await getEventDetails(eventId);
+      }
+      
+      // Триггерим рефетч событий для обновления списков
+      refetchEvents();
+    } catch (err) {
+      console.error('Failed to add member:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка при добавлении участника';
+      showNotification('error', errorMessage);
+      throw err;
+    }
+  }, [executeWithAuth, showNotification, selectedEvent, getEventDetails, refetchEvents]);
+
   return (
     <EventsContext.Provider value={{
       events,
@@ -375,6 +419,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       isDetailsLoading,
       notification,
       selectedEvent,
+      removeMember,
+      addMemberToEvent, // 🆕
       addEvent,
       deleteEvent,
       updateEvent,

@@ -81,7 +81,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         eventId: null,
         type: notifType,
         recipientStatus: 'NoReaction' as const,
-        includeDeleted: notifType === 'EventDeclined', // Добавлено: true для отмененных, false для остальных
+        includeDeleted: notifType === 'EventDeclined' || notifType === 'EventUpdated',
         pageSize: 1,
         pageNumber: 1,
       } as SearchNotificationsRequest;
@@ -132,7 +132,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         eventId: null,
         type: targetType,
         recipientStatus: 'NoReaction' as const,
-        includeDeleted: targetType === 'EventDeclined', // Добавлено: true для отмененных, false для остальных
+        includeDeleted: targetType === 'EventDeclined' || targetType === 'EventUpdated',
         pageSize: PAGE_SIZE,
         pageNumber: targetPage,
       } as SearchNotificationsRequest;

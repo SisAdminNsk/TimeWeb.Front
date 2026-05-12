@@ -16,6 +16,7 @@ export interface SignInRequest {
 export interface SignInResponse {
   accessToken: string;
   refreshToken: string;
+  userId: string;
 }
 
 export interface CheckUserExistenceResponse{
@@ -112,7 +113,8 @@ export interface ResetPasswordRequest{
 
 export interface BindEmailRequest{
   newEmail: string
-  accountPassword: string
+  accountPassword: string,
+  captchaToken: string
 }
 
 export interface BindEmailResponse{

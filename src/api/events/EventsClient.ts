@@ -87,6 +87,22 @@ export const eventsClient = {
       headers: getHeaders(authToken)
     });
     return handleResponse<DeclieEventResponse>(response);
+  },
+
+  addMember: async(authToken: string, eventId: string, memberId: string): Promise<void> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}/members/${memberId}`, {
+      method: 'POST',
+      headers: getHeaders(authToken)
+    });
+    return handleResponse<void>(response);
+  },
+
+  removeMember: async(authToken: string, eventId: string, memberId: string): Promise<void> => {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/events/${eventId}/members/${memberId}`, {
+      method: 'DELETE',
+      headers: getHeaders(authToken)
+    });
+    return handleResponse<void>(response);
   }
 };
 

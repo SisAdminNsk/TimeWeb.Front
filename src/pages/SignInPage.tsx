@@ -48,7 +48,6 @@ const getRecoveryErrorMessage = (statusCode: number, method: 'recover' | 'verify
   }
 };
 
-// Простой хелпер для создания объекта ошибки
 const createApiError = (message: string, statusCode: number): ApiError => ({
   errorCode: `HTTP_${statusCode}`,
   errorMessage: message,
@@ -89,6 +88,7 @@ export const SignInPage = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationId, setVerificationId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // 🔐 Новое поле подтверждения
   const [resetToken, setResetToken] = useState<string | null>(null);
   
   const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
@@ -96,7 +96,6 @@ export const SignInPage = () => {
   const [resendTimer, setResendTimer] = useState(0);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   
-  // 🔐 reCAPTCHA state
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const captchaRef = useRef<ReCAPTCHA>(null);
 
@@ -115,7 +114,12 @@ export const SignInPage = () => {
     }
   }, [newPassword, passwordError]);
 
-  // 🔐 Сброс капчи при смене шага восстановления
+  useEffect(() => {
+    if (confirmPassword && passwordError?.includes('не совпадают')) {
+      setPasswordError(null);
+    }
+  }, [confirmPassword, passwordError]);
+
   useEffect(() => {
     if (recoveryStep !== 'email') {
       setCaptchaToken(null);
@@ -149,7 +153,6 @@ export const SignInPage = () => {
       setResetToken(null);
     }
     
-    // 🔐 Сброс капчи при ошибке валидации
     if (statusCode === 400) {
       captchaRef.current?.reset();
       setCaptchaToken(null);
@@ -162,7 +165,6 @@ export const SignInPage = () => {
       return;
     }
 
-    // 🔐 Валидация CAPTCHA
     if (!captchaToken) {
       setRecoveryError(createApiError('Пожалуйста, подтвердите, что вы не робот', 400));
       return;
@@ -232,6 +234,12 @@ export const SignInPage = () => {
       setPasswordError(validationError);
       return;
     }
+    
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Пароли не совпадают. Проверьте введённые значения.');
+      return;
+    }
+    
     if (!resetToken) {
       setRecoveryError(createApiError('Сессия восстановления истекла. Начните заново.', 403));
       setRecoveryStep('email');
@@ -297,6 +305,7 @@ export const SignInPage = () => {
     setVerificationCode('');
     setVerificationId(null);
     setNewPassword('');
+    setConfirmPassword('');
     setResetToken(null);
     setRecoveryError(null);
     setResendTimer(0);
@@ -376,9 +385,7 @@ export const SignInPage = () => {
     opacity: isAnySubmitting ? 0.6 : 1,
   };
 
-  // 🔧 ИСПРАВЛЕННЫЙ СТИЛЬ ДЛЯ ПОЛЯ ВВОДА КОДА
   const codeInputStyle: React.CSSProperties = {
-    // Базовые стили (без width: 100% чтобы избежать конфликта)
     padding: `${spacing.sm} ${spacing.md}`,
     border: `1px solid ${colors.gray300}`,
     borderRadius: borderRadius.md,
@@ -387,14 +394,12 @@ export const SignInPage = () => {
     boxSizing: 'border-box',
     opacity: isRecoverySubmitting ? 0.6 : 1,
     
-    // Центрирование и форматирование кода
     textAlign: 'center' as const,
     letterSpacing: '12px',
-    width: '200px', // Фиксированная ширина вместо maxWidth
+    width: '200px',
     margin: '0 auto',
     display: 'block',
     
-    // Компенсация letter-spacing для корректного отображения первого/последнего символа
     paddingLeft: '24px',
     paddingRight: '24px',
   };
@@ -503,7 +508,6 @@ export const SignInPage = () => {
           </p>
         </div>
 
-        {/* Глобальная ошибка авторизации */}
         {hasGlobalError() && (
           <div style={{
             ...messageBoxStyle,
@@ -515,7 +519,6 @@ export const SignInPage = () => {
           </div>
         )}
 
-        {/* Ошибки восстановления */}
         {showRecovery && recoveryError?.errorMessage && (
           <div style={{
             ...messageBoxStyle,
@@ -527,7 +530,6 @@ export const SignInPage = () => {
           </div>
         )}
 
-        {/* Успешный сброс пароля */}
         {showRecovery && recoveryStep === 'success' && (
           <div style={{
             ...messageBoxStyle,
@@ -539,10 +541,8 @@ export const SignInPage = () => {
           </div>
         )}
 
-        {/* Форма */}
         <form onSubmit={showRecovery ? handleRecoverySubmit : handleSubmit}>
           {!showRecovery ? (
-            // === ФОРМА ВХОДА ===
             <>
               <div style={inputGroupStyle}>
                 <label style={labelStyle}>Имя пользователя</label>
@@ -591,7 +591,6 @@ export const SignInPage = () => {
               </div>
             </>
           ) : recoveryStep === 'email' ? (
-            // === ШАГ 1: Ввод email + CAPTCHA ===
             <>
               <div style={inputGroupStyle}>
                 <label style={labelStyle}>Email</label>
@@ -607,7 +606,6 @@ export const SignInPage = () => {
                 />
               </div>
               
-              {/* 🔐 reCAPTCHA виджет */}
               <div style={{ 
                 marginBottom: spacing.lg, 
                 display: 'flex', 
@@ -629,7 +627,6 @@ export const SignInPage = () => {
                 />
               </div>
               
-              {/* Ошибка, если капча не пройдена */}
               {!captchaToken && recoveryError?.errorCode === 'CAPTCHA_REQUIRED' && (
                 <div style={{ ...errorStyle, textAlign: 'center', marginBottom: spacing.sm }}>
                   ⚠️ Пожалуйста, подтвердите, что вы не робот
@@ -637,13 +634,11 @@ export const SignInPage = () => {
               )}
             </>
           ) : recoveryStep === 'code' ? (
-            // === ШАГ 2: Ввод кода — ИСПРАВЛЕННАЯ ВЕРСИЯ ===
             <div style={inputGroupStyle}>
               <label style={{ ...labelStyle, textAlign: 'center', display: 'block' }}>
                 Код из письма
               </label>
               
-              {/* Контейнер для идеального центрирования инпута */}
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'center', 
@@ -685,7 +680,6 @@ export const SignInPage = () => {
               </div>
             </div>
           ) : recoveryStep === 'password' ? (
-            // === ШАГ 3: Новый пароль ===
             <>
               <div style={inputGroupStyle}>
                 <label style={labelStyle}>Новый пароль</label>
@@ -698,10 +692,12 @@ export const SignInPage = () => {
                   placeholder="Придумайте пароль"
                   onFocus={(e) => e.target.style.borderColor = colors.primary}
                   onBlur={(e) => e.target.style.borderColor = colors.gray300}
+                  autoComplete="new-password"
                 />
-                {passwordError && <div style={errorStyle}>{passwordError}</div>}
+                {passwordError && !passwordError.includes('не совпадают') && (
+                  <div style={errorStyle}>{passwordError}</div>
+                )}
                 
-                {/* Индикатор надёжности пароля */}
                 {newPassword && (
                   <div style={{ marginTop: spacing.sm }}>
                     <div style={{ 
@@ -724,8 +720,37 @@ export const SignInPage = () => {
                   </div>
                 )}
               </div>
+
+              <div style={inputGroupStyle}>
+                <label style={labelStyle}>Подтвердите пароль</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isRecoverySubmitting}
+                  style={{
+                    ...inputStyle,
+                    borderColor: confirmPassword && newPassword !== confirmPassword 
+                      ? colors.error 
+                      : colors.gray300
+                  }}
+                  placeholder="Повторите пароль"
+                  onFocus={(e) => e.target.style.borderColor = colors.primary}
+                  onBlur={(e) => {
+                    if (confirmPassword && newPassword !== confirmPassword) {
+                      e.target.style.borderColor = colors.error;
+                    } else {
+                      e.target.style.borderColor = colors.gray300;
+                    }
+                  }}
+                  autoComplete="new-password"
+                />
+  
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <div style={errorStyle}>⚠️ Пароли не совпадают</div>
+                )}
+              </div>
               
-              {/* Требования к паролю */}
               <div style={{ 
                 fontSize: typography.fontSize.xs, 
                 color: colors.gray500, 
@@ -744,14 +769,13 @@ export const SignInPage = () => {
             </>
           ) : null}
 
-          {/* === КНОПКИ ДЕЙСТВИЙ === */}
           {showRecovery && recoveryStep === 'success' ? null : (
             <button
               type="submit"
               disabled={
                 isAnySubmitting || 
                 (showRecovery && recoveryStep === 'email' && !captchaToken) ||
-                (showRecovery && recoveryStep === 'password' && !newPassword)
+                (showRecovery && recoveryStep === 'password' && (!newPassword || !confirmPassword || newPassword !== confirmPassword))
               }
               style={buttonStyle}
               onMouseOver={(e) => {
@@ -790,7 +814,6 @@ export const SignInPage = () => {
             </button>
           )}
 
-          {/* Вторичная кнопка */}
           {showRecovery && recoveryStep !== 'success' && (
             <button
               type="button"
@@ -812,7 +835,6 @@ export const SignInPage = () => {
             </button>
           )}
 
-          {/* Кнопка после успешного сброса */}
           {showRecovery && recoveryStep === 'success' && (
             <button
               type="button"
@@ -826,7 +848,6 @@ export const SignInPage = () => {
           )}
         </form>
 
-        {/* 🔗 Ссылка на регистрацию */}
         {!showRecovery && (
           <p style={{ 
             textAlign: 'center', 
@@ -859,7 +880,6 @@ export const SignInPage = () => {
         input[type=number] {
           -moz-appearance: textfield;
         }
-        /* Стили для reCAPTCHA iframe */
         .g-recaptcha > div {
           margin: 0 auto;
         }
