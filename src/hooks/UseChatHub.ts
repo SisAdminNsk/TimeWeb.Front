@@ -30,8 +30,7 @@ interface UseChatHubResult {
 
 const MESSAGES_PER_PAGE = 200;
 const MAX_MESSAGES = 5000;
-
-const chatsApiUrl = config.chatsApiUrl;
+const chatsApiUrl = config.apiUrl;
 
 const isUnauthorizedError = (err: unknown): boolean => {
   if (!err) return false;
@@ -47,23 +46,19 @@ const isUnauthorizedError = (err: unknown): boolean => {
 export const useChatHub = (): UseChatHubResult => {
   const { getToken, handleUnauthorized } = useAuth();
 
-  // ✅ Стейты только для UI-состояний
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
-
-  // ✅ Реф для хранения экземпляра соединения (императивный доступ)
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const currentChatId = useRef<string | null>(null);
-
+  const connectionStartPromiseRef = useRef<Promise<void> | null>(null);
   const currentPageRef = useRef<number>(1);
   const totalPagesRef = useRef<number>(1);
   const loadedPagesRef = useRef<Set<number>>(new Set());
   const totalCountRef = useRef<number>(0);
 
-  // ──────────────────────────────────────────────
   const createConnection = useCallback((): signalR.HubConnection => {
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(`${chatsApiUrl}/chat`, {
@@ -106,7 +101,6 @@ export const useChatHub = (): UseChatHubResult => {
     return newConnection;
   }, [getToken]);
 
-  // ──────────────────────────────────────────────
   const loadMessagesPage = useCallback(async (
     chatId: string,
     pageNumber: number,
@@ -128,13 +122,20 @@ export const useChatHub = (): UseChatHubResult => {
     return { messages: messagesList, totalCount: response.totalCount || 0 };
   }, [getToken]);
 
-  // ──────────────────────────────────────────────
   const startConnectionWithRefresh = useCallback(async (conn: signalR.HubConnection) => {
     if (conn.state === signalR.HubConnectionState.Connected) return;
+    if (conn.state === signalR.HubConnectionState.Connecting && connectionStartPromiseRef.current) {
+      await connectionStartPromiseRef.current;
+      return;
+    }
 
     try {
-      await conn.start();
+      const startPromise = conn.start();
+      connectionStartPromiseRef.current = startPromise;
+      await startPromise;
+      connectionStartPromiseRef.current = null;
     } catch (err: unknown) {
+      connectionStartPromiseRef.current = null;
       if (isUnauthorizedError(err)) {
         console.warn('SignalR connection → 401, trying refresh token...');
 
@@ -153,7 +154,10 @@ export const useChatHub = (): UseChatHubResult => {
           };
           localStorage.setItem('user_session', JSON.stringify(newSession));
 
-          await conn.start();
+          const retryPromise = conn.start();
+          connectionStartPromiseRef.current = retryPromise;
+          await retryPromise;
+          connectionStartPromiseRef.current = null;
           console.log('SignalR reconnected with refreshed token');
           return;
         } catch (refreshErr) {
@@ -166,7 +170,11 @@ export const useChatHub = (): UseChatHubResult => {
     }
   }, [handleUnauthorized]);
 
-  // ──────────────────────────────────────────────
+  const startConnectionWithRefreshRef = useRef(startConnectionWithRefresh);
+  useEffect(() => {
+    startConnectionWithRefreshRef.current = startConnectionWithRefresh;
+  }, [startConnectionWithRefresh]);
+
   const joinChat = useCallback(async (chatId: string) => {
     const conn = connectionRef.current;
     if (!conn) throw new Error('Connection not initialized');
@@ -175,51 +183,51 @@ export const useChatHub = (): UseChatHubResult => {
       setError(null);
       currentChatId.current = chatId;
 
-      await startConnectionWithRefresh(conn);
-
-      await conn.invoke('JoinChat', chatId);
-
-      setIsConnected(true);
       setMessages([]);
       loadedPagesRef.current.clear();
       currentPageRef.current = 1;
       totalPagesRef.current = 1;
       totalCountRef.current = 0;
+      setHasMoreHistory(true);
+      setIsLoadingHistory(true); 
 
-      setIsLoadingHistory(true);
-      try {
-        const { messages: firstPageMessages, totalCount } = await loadMessagesPage(chatId, 1);
-        totalCountRef.current = totalCount;
+      const connectionPromise = startConnectionWithRefresh(conn);
+      const historyPromise = loadMessagesPage(chatId, 1);
 
-        if (totalCount === 0) {
-          setHasMoreHistory(false);
-          return;
-        }
+      await connectionPromise;
+      await conn.invoke('JoinChat', chatId);
+      setIsConnected(true);
 
-        const totalPages = Math.ceil(totalCount / MESSAGES_PER_PAGE);
-        totalPagesRef.current = totalPages;
-        loadedPagesRef.current.add(1);
+      const { messages: firstPageMessages, totalCount } = await historyPromise;
+      totalCountRef.current = totalCount;
 
-        const sortedMessages = [...firstPageMessages].sort(
-          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-
-        setMessages(sortedMessages);
-        setHasMoreHistory(totalPages > 1);
-      } finally {
-        setIsLoadingHistory(false);
+      if (totalCount === 0) {
+        setHasMoreHistory(false);
+        setMessages([]);
+        return;
       }
+
+      const totalPages = Math.ceil(totalCount / MESSAGES_PER_PAGE);
+      totalPagesRef.current = totalPages;
+      loadedPagesRef.current.add(1);
+
+      const sortedMessages = [...firstPageMessages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+
+      setMessages(sortedMessages);
+      setHasMoreHistory(totalPages > 1);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to join chat');
       throw err;
+    } finally {
+      setIsLoadingHistory(false);
     }
   }, [startConnectionWithRefresh, loadMessagesPage]);
 
-  // ──────────────────────────────────────────────
   const sendMessage = useCallback(async (content: string): Promise<void> => {
     const conn = connectionRef.current;
     if (!conn || !currentChatId.current) throw new Error('Not connected to chat');
-
     const token = getToken();
 
     try {
@@ -231,7 +239,6 @@ export const useChatHub = (): UseChatHubResult => {
     }
   }, [getToken]);
 
-  // ──────────────────────────────────────────────
   const leaveChat = useCallback(async (chatId: string) => {
     const conn = connectionRef.current;
     if (!conn) return;
@@ -249,7 +256,6 @@ export const useChatHub = (): UseChatHubResult => {
     }
   }, []);
 
-  // ──────────────────────────────────────────────
   const loadMoreHistory = useCallback(async () => {
     if (!currentChatId.current || isLoadingHistory || !hasMoreHistory) return;
 
@@ -261,10 +267,7 @@ export const useChatHub = (): UseChatHubResult => {
 
     setIsLoadingHistory(true);
     try {
-      const { messages: olderMessages } = await loadMessagesPage(
-        currentChatId.current,
-        nextPage
-      );
+      const { messages: olderMessages } = await loadMessagesPage(currentChatId.current, nextPage);
 
       if (olderMessages.length === 0) {
         setHasMoreHistory(false);
@@ -277,15 +280,11 @@ export const useChatHub = (): UseChatHubResult => {
       setMessages((prev) => {
         const newIds = new Set(olderMessages.map((m) => m.id));
         const filteredPrev = prev.filter((m) => !newIds.has(m.id));
-
         const combined = [...olderMessages, ...filteredPrev];
         const sorted = combined.sort(
           (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
-
-        return sorted.length > MAX_MESSAGES
-          ? sorted.slice(sorted.length - MAX_MESSAGES)
-          : sorted;
+        return sorted.length > MAX_MESSAGES ? sorted.slice(sorted.length - MAX_MESSAGES) : sorted;
       });
 
       setHasMoreHistory(nextPage < totalPagesRef.current);
@@ -296,19 +295,16 @@ export const useChatHub = (): UseChatHubResult => {
     }
   }, [isLoadingHistory, hasMoreHistory, loadMessagesPage]);
 
-  // ──────────────────────────────────────────────
   const reconnect = useCallback(async () => {
     const conn = connectionRef.current;
     if (conn) await conn.stop();
 
     const newConnection = createConnection();
-    connectionRef.current = newConnection; // ✅ Только реф, без setConnection
+    connectionRef.current = newConnection;
 
     try {
       await startConnectionWithRefresh(newConnection);
-
       setIsConnected(true);
-
       if (currentChatId.current) {
         await newConnection.invoke('JoinChat', currentChatId.current);
       }
@@ -317,15 +313,20 @@ export const useChatHub = (): UseChatHubResult => {
     }
   }, [createConnection, startConnectionWithRefresh]);
 
-  // ──────────────────────────────────────────────
   useEffect(() => {
     const newConnection = createConnection();
-    connectionRef.current = newConnection; // ✅ Только реф
+    connectionRef.current = newConnection;
+    const token = getToken();
+    if (token) {
+      startConnectionWithRefreshRef.current(newConnection).catch(err => {
+        console.warn('Background SignalR start failed:', err);
+      });
+    }
 
     return () => {
       newConnection.stop().catch(console.error);
     };
-  }, [createConnection]);
+  }, [createConnection, getToken]);
 
   return {
     isConnected,

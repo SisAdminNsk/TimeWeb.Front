@@ -13,7 +13,7 @@ import type {
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
 
-const apiBaseUrl = config.eventsApiUrl;
+const apiBaseUrl = config.apiUrl;
 
 export const eventsClient = {
   createEvent: async (authToken: string, request: CreateEventRequest): Promise<CreateEventResponse> => {

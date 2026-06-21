@@ -56,6 +56,11 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
   
   const [newNotificationIds, setNewNotificationIds] = useState<Set<string>>(new Set());
   const previousNotificationIds = useRef<Set<string>>(new Set());
+  const previousNotificationsByType = useRef<Record<'NewEvent' | 'EventUpdated' | 'EventDeclined', Set<string>>>({
+    NewEvent: new Set(),
+    EventUpdated: new Set(),
+    EventDeclined: new Set(),
+  });
   const newNotificationTimersRef = useRef<Map<string, number>>(new Map());
   
   const hasLoadedOnce = useRef(false);
@@ -229,6 +234,106 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
     }
   }, [executeWithAuth, type, page, addToast]);
 
+  const pollAllNotifications = useCallback(async () => {
+    try {
+      const typeLabels = {
+        'NewEvent': 'новая встреча',
+        'EventUpdated': 'изменение встречи',
+        'EventDeclined': 'отмена встречи',
+      };
+
+      // Получаем уведомления для всех трех типов параллельно
+      const results = await Promise.all(
+        NOTIFICATION_TYPES.map(async (notifType) => {
+          try {
+            const req = {
+              eventId: null,
+              type: notifType,
+              recipientStatus: 'NoReaction' as const,
+              includeDeleted: notifType === 'EventDeclined' || notifType === 'EventUpdated',
+              pageSize: 1,
+              pageNumber: 1,
+            } as SearchNotificationsRequest;
+
+            const resp: SearchNotificationsResponse = await executeWithAuth(token => {
+              if (!token) {
+                throw new Error('Auth token is missing');
+              }
+              return eventsClient.searchNotifications(token, req);
+            });
+
+            return { type: notifType, totalCount: resp?.totalCount ?? 0, notifications: resp?.notifications ?? [] };
+          } catch (err) {
+            console.error(`[Notifications] Ошибка при polling для ${notifType}:`, err);
+            return { type: notifType, totalCount: 0, notifications: [] };
+          }
+        })
+      );
+
+      // Обновляем счетчики
+      const newTypeCounts = {
+        NewEvent: 0,
+        EventUpdated: 0,
+        EventDeclined: 0,
+      };
+
+      // Проверяем каждый тип на новые уведомления
+      results.forEach(result => {
+        const { type: notifType, totalCount, notifications } = result;
+        newTypeCounts[notifType] = totalCount;
+
+        if (hasLoadedOnce.current) {
+          const currentIds = new Set<string>();
+          const newIds = new Set<string>();
+
+          notifications.forEach(n => {
+            const id = `${n.eventId}-${n.createdAt}`;
+            currentIds.add(id);
+            
+            if (!previousNotificationsByType.current[notifType].has(id)) {
+              newIds.add(id);
+            }
+          });
+
+          // Если есть новые уведомления, показываем toast
+          if (newIds.size > 0) {
+            const label = typeLabels[notifType];
+            const message = newIds.size === 1 
+              ? `${label}` 
+              : `${label}: ${newIds.size}`;
+
+            addToast({
+              title: 'Новое уведомление',
+              message: message,
+              type: 'info',
+            });
+
+            console.log(`[Notifications] Новых ${notifType}: ${newIds.size}`);
+          }
+
+          // Обновляем предыдущие ID для этого типа
+          previousNotificationsByType.current[notifType] = currentIds;
+        } else {
+          // При первой загрузке просто запоминаем ID
+          const currentIds = new Set<string>();
+          notifications.forEach(n => {
+            const id = `${n.eventId}-${n.createdAt}`;
+            currentIds.add(id);
+          });
+          previousNotificationsByType.current[notifType] = currentIds;
+        }
+      });
+
+      setTypeCounts(newTypeCounts);
+
+      if (!hasLoadedOnce.current) {
+        hasLoadedOnce.current = true;
+      }
+    } catch (err) {
+      console.error('[Notifications] Ошибка при polling всех типов:', err);
+    }
+  }, [executeWithAuth, addToast]);
+
   const onAccept = useCallback(async (eventId: string) => {
     console.log('[Notifications] Принятие события:', eventId);
     
@@ -248,6 +353,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       
       await refreshAllCounts();
       await refreshNotifications(type, page, false);
+      await pollAllNotifications();
     } catch (err) {
       console.error('[Notifications] Ошибка при принятии события:', err);
       addToast({
@@ -257,7 +363,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       });
       throw err;
     }
-  }, [executeWithAuth, addToast, refreshAllCounts, refreshNotifications, type, page]);
+  }, [executeWithAuth, addToast, refreshAllCounts, refreshNotifications, type, page, pollAllNotifications]);
 
   const onDecline = useCallback(async (eventId: string) => {
     console.log('[Notifications] Отклонение события:', eventId);
@@ -278,6 +384,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       
       await refreshAllCounts();
       await refreshNotifications(type, page, false);
+      await pollAllNotifications();
     } catch (err) {
       console.error('[Notifications] Ошибка при отклонении события:', err);
       addToast({
@@ -287,7 +394,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       });
       throw err;
     }
-  }, [executeWithAuth, addToast, refreshAllCounts, refreshNotifications, type, page]);
+  }, [executeWithAuth, addToast, refreshAllCounts, refreshNotifications, type, page, pollAllNotifications]);
 
   useEffect(() => {
     refreshAllCounts();
@@ -297,8 +404,8 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
     refreshNotifications(type, page, false);
     
     const interval = setInterval(() => {
-      refreshNotifications(type, page, true);
-      refreshAllCounts();
+      // Polling для всех типов одновременно
+      pollAllNotifications();
     }, POLLING_INTERVAL);
 
     return () => {
@@ -306,7 +413,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
       newNotificationTimersRef.current.forEach((timer) => clearTimeout(timer));
       newNotificationTimersRef.current.clear();
     };
-  }, [type, page, refreshNotifications, refreshAllCounts]);
+  }, [type, page, refreshNotifications, pollAllNotifications]);
 
   const totalNotificationsCount = Object.values(typeCounts).reduce((sum, count) => sum + count, 0);
 

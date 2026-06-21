@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFriends } from '../context/FriendsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -69,12 +69,13 @@ export const FriendsPage = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activePersonalChat, setActivePersonalChat] = useState<ActivePersonalChat | null>(null);
   
-  // 🆕 Состояние для модального окна расписания
   const [scheduleModal, setScheduleModal] = useState<{
     isOpen: boolean;
     friendId: string | null;
     friendName: string | null;
   }>({ isOpen: false, friendId: null, friendName: null });
+
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     const handleResize = () => {
@@ -98,6 +99,22 @@ export const FriendsPage = () => {
     refreshFriends(1);
     refreshInvites();
   }, []);
+
+  // 🆕 Обновление данных и счетчиков для ВСЕХ разделов при переключении вкладок
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    
+    // Запрашиваем свежие данные для всех списков, чтобы счетчики в сайдбаре всегда были актуальны
+    // При этом передаем текущие страницы, чтобы не сбрасывать пагинацию у пользователя
+    refreshFriends(friendsPage);
+    refreshIncomingInvites(incomingPage);
+    refreshOutgoingInvites(outgoingPage);
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
 
   useEffect(() => {
     if (isMobile) setIsSidebarOpen(false);
@@ -135,8 +152,8 @@ export const FriendsPage = () => {
     const dateTs = date.getTime();
     const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     let text = '';
-    if (dateTs >= todayStart) text = `сегодня в ${timeStr}`;
-    else if (dateTs >= yesterdayStart) text = `вчера в ${timeStr}`;
+    if (dateTs >= todayStart) text = `заходил(а) сегодня в ${timeStr}`;
+    else if (dateTs >= yesterdayStart) text = `заходил(а) вчера в ${timeStr}`;
     else {
       const dateStr = date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
       text = `${dateStr} в ${timeStr}`;
@@ -260,6 +277,37 @@ export const FriendsPage = () => {
   const sectionDescriptionStyle: React.CSSProperties = { margin: `${spacing.xs} 0 0 0`, fontSize: typography.fontSize.sm, color: colors.gray500 };
   const sectionBodyStyle: React.CSSProperties = { padding: isMobile ? spacing.md : spacing.xl };
   const buttonSecondaryStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, fontSize: typography.fontSize.sm, backgroundColor: 'transparent', color: colors.gray700, border: `1px solid ${colors.gray300}`, borderRadius: borderRadius.md, cursor: 'pointer', fontWeight: typography.fontWeight.medium, transition: `all ${transitions.normal}`, display: 'flex', alignItems: 'center', gap: spacing.xs, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
+  
+  // 🎨 Стильные кнопки действий для друзей
+  const getFriendActionButtonStyle = (variant: 'schedule' | 'chat' | 'remove', disabled: boolean = false): React.CSSProperties => {
+    const isRemove = variant === 'remove';
+    const baseColor = variant === 'schedule' ? colors.info : 
+                      variant === 'chat' ? colors.primary : 
+                      colors.error;
+    
+    return {
+      padding: `${spacing.xs} ${spacing.sm}`,
+      fontSize: typography.fontSize.xs,
+      backgroundColor: disabled ? colors.gray200 : 
+        isRemove ? colors.error : 'transparent',
+      color: disabled ? colors.gray400 : 
+        isRemove ? colors.white : baseColor,
+      border: disabled ? '1px solid transparent' : 
+        isRemove ? 'none' : `1.5px solid ${baseColor}`,
+      borderRadius: borderRadius.md,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      fontWeight: typography.fontWeight.medium,
+      transition: `all ${transitions.fast}`,
+      opacity: disabled ? 0.6 : 1,
+      outline: 'none',
+      whiteSpace: 'nowrap' as const,
+      display: 'flex',
+      alignItems: 'center',
+      gap: spacing.xs,
+      minHeight: '32px',
+    };
+  };
+  
   const getActionButtonStyle = (variant: 'success' | 'danger' | 'secondary' | 'chat', disabled: boolean = false): React.CSSProperties => ({ 
     padding: `${spacing.xs} ${spacing.sm}`, 
     fontSize: typography.fontSize.xs, 
@@ -281,6 +329,7 @@ export const FriendsPage = () => {
     alignItems: 'center', 
     gap: spacing.xs 
   });
+  
   const listStyle: React.CSSProperties = { backgroundColor: colors.white, borderRadius: borderRadius.lg, boxShadow: shadows.sm, border: `1px solid ${colors.gray200}`, overflow: 'hidden' };
   const listItemStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${colors.gray100}`, transition: `background ${transitions.fast}` };
   const listItemMobileStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${colors.gray100}`, transition: `background ${transitions.fast}`, gap: spacing.md };
@@ -395,9 +444,9 @@ export const FriendsPage = () => {
                   
                   <div style={isMobile ? actionButtonsMobileStyle : actionButtonsStyle}>
                     
-                    {/* 🔥 Кнопка "Расписание" */}
+                    {/* 🎨 Кнопка "Расписание" — outline стиль, цвет info */}
                     <button 
-                      style={getActionButtonStyle('secondary', isLoading)}
+                      style={getFriendActionButtonStyle('schedule', isLoading)}
                       onClick={(e) => {
                         e.stopPropagation();
                         setScheduleModal({
@@ -418,8 +467,9 @@ export const FriendsPage = () => {
                       {isMobile ? 'Расп.' : 'Расписание'}
                     </button>
                     
+                    {/* 🎨 Кнопка "Чат" — outline стиль, цвет primary */}
                     <button 
-                      style={getActionButtonStyle('chat', isChatLoading || isLoading)}
+                      style={getFriendActionButtonStyle('chat', isChatLoading || isLoading)}
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
@@ -443,8 +493,9 @@ export const FriendsPage = () => {
                       {isChatLoading ? '...' : (isMobile ? 'Чат' : 'Чат')}
                     </button>
                     
+                    {/* 🎨 Кнопка "Удалить" — solid стиль, цвет error */}
                     <button 
-                      style={getActionButtonStyle('danger', isLoading)} 
+                      style={getFriendActionButtonStyle('remove', isLoading)} 
                       onClick={(e) => {
                         e.stopPropagation();
                         handleRemoveFriendClick(friend.friendId, friendName);
@@ -452,7 +503,11 @@ export const FriendsPage = () => {
                       disabled={isLoading} 
                       title="Удалить из друзей"
                     >
-                      {isMobile ? 'Удалить' : 'Удалить'}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                      Удалить
                     </button>
                     
                   </div>
@@ -709,7 +764,6 @@ export const FriendsPage = () => {
         </div>
       )}
       
-      {/* 🔥 Модальное окно с расписанием друга */}
       <FriendScheduleModal
         isOpen={scheduleModal.isOpen}
         friendId={scheduleModal.friendId || ''}

@@ -140,7 +140,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   const hasChat = eventDetails?.chatId !== null && eventDetails?.chatId !== undefined;
 
   const handleConfirmRemoveMember = async () => {
-    const { participantId, participantUsername } = confirmDeleteModal;
+    const { participantId} = confirmDeleteModal;
     if (!participantId || !eventId) return;
     
     setRemovingMemberId(participantId);

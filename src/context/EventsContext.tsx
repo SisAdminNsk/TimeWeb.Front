@@ -47,7 +47,7 @@ interface EventsContextType {
   hasEventsOnDate: (date: string) => boolean;
   isEventInitiator: (eventId: string) => boolean;
   removeMember: (eventId: string, memberId: string) => Promise<void>;
-  addMemberToEvent: (eventId: string, memberId: string) => Promise<void>; // 🆕
+  addMemberToEvent: (eventId: string, memberId: string) => Promise<void>;
   clearNotification: () => void;
   
   fetchEventsForMonth: (year: number, month: number) => Promise<void>;
@@ -57,6 +57,10 @@ interface EventsContextType {
   refetchEvents: () => void;
   
   getFriendEventsForDate: (friendId: string, date: string) => Promise<CalendarEvent[]>;
+  
+  // 🆕 Новые методы для оптимизации и корректной работы календаря
+  getAllEvents: () => CalendarEvent[];
+  fetchAllEventsForMonth: (year: number, month: number) => Promise<void>;
 }
 
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
@@ -308,6 +312,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     setSelectedDate(date);
   }, []);
 
+  // 🆕 Экспортируем getAllEvents для использования в компонентах
   const getAllEvents = useCallback(() => {
     const eventsMap = new Map<string, CalendarEvent>();
     
@@ -387,7 +392,6 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [executeWithAuth, showNotification, selectedEvent, getEventDetails, refetchEvents]);
 
-  // 🆕 Метод для добавления участника в событие (отправка приглашения)
   const addMemberToEvent = useCallback(async (eventId: string, memberId: string): Promise<void> => {
     try {
       await executeWithAuth(token =>
@@ -395,12 +399,10 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       );
       showNotification('success', 'Приглашение отправлено');
       
-      // 🔄 Обновляем детали события, если они открыты
       if (selectedEvent?.eventId === eventId) {
         await getEventDetails(eventId);
       }
       
-      // Триггерим рефетч событий для обновления списков
       refetchEvents();
     } catch (err) {
       console.error('Failed to add member:', err);
@@ -420,7 +422,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       notification,
       selectedEvent,
       removeMember,
-      addMemberToEvent, // 🆕
+      addMemberToEvent,
       addEvent,
       deleteEvent,
       updateEvent,
@@ -435,6 +437,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       setSelectedEvent,
       refetchEvents,
       getFriendEventsForDate,
+      getAllEvents,
+      fetchAllEventsForMonth,
     }}>
       {children}
     </EventsContext.Provider>

@@ -325,17 +325,9 @@ export const LayoutPage = () => {
         <nav style={navStyle}>
            <Link to="/notifications" style={navItemStyle('/notifications')} onClick={handleNavClick}>
             <span>Новости по встречам</span>
-            {/* Общий суммарный счетчик всех уведомлений */}
-            <span style={notificationBadgeStyle}>
-              {totalNotificationsCount > 99 ? '99+' : totalNotificationsCount}
-            </span>
           </Link>
            <Link to="/events" style={navItemStyle('/events')} onClick={handleNavClick}>
             <span>Календарь встреч</span>
-            {/* Счетчик встреч на текущий месяц */}
-            <span style={notificationBadgeStyle}>
-              {eventsCountForMonth > 99 ? '99+' : eventsCountForMonth}
-            </span>
           </Link>
           <Link to="/cabinet" style={navItemStyle('/cabinet')} onClick={handleNavClick}>
             Личный кабинет

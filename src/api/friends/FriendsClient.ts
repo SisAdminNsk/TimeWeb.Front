@@ -8,7 +8,7 @@ import type {
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
 
-const apiBaseUrl = config.friendsApiUrl;
+const apiBaseUrl = config.apiUrl;
 
 export const friendsClient = {
   sendInvite: async (authToken: string, recipientId: string): Promise<FriendshipInviteDto> => {

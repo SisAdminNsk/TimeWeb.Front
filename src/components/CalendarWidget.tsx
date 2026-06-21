@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEvents } from '../context/EventsContext';
 import { theme } from '../styles/theme';
 
@@ -15,10 +15,17 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     hasEventsOnDate, 
     getEventsForDate, 
     isLoading,
+    fetchAllEventsForMonth,
+    getAllEvents 
   } = useEvents();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [hoveredDay, setHoveredDay] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchAllEventsForMonth(currentMonth.getFullYear(), currentMonth.getMonth());
+  }, [currentMonth, fetchAllEventsForMonth]);
 
   const monthNames = [
     'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -41,16 +48,19 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   const { daysInMonth, startingDay } = getDaysInMonth(currentMonth);
 
   const prevMonth = () => {
+    setHoveredDay(null);
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
   };
 
   const nextMonth = () => {
+    setHoveredDay(null);
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
 
   const goToToday = () => {
     const today = new Date();
     setCurrentMonth(today);
+    setHoveredDay(null);
     
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -67,15 +77,6 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     return `${year}-${month}-${dayStr}`;
   };
 
-  const isToday = (day: number) => {
-    const today = new Date();
-    return (
-      day === today.getDate() &&
-      currentMonth.getMonth() === today.getMonth() &&
-      currentMonth.getFullYear() === today.getFullYear()
-    );
-  };
-
   const isSelected = (day: number) => {
     if (!selectedDate) return false;
     const dateStr = formatDate(day);
@@ -86,14 +87,14 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     onDateSelect?.(dateStr);
   };
 
-  // Подсчет всех событий на месяц
   const getEventsCountForMonth = () => {
-    let count = 0;
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = formatDate(day);
-      count += getEventsForDate(dateStr).length;
-    }
-    return count;
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    
+    return getAllEvents().filter(event => {
+      const [eventYear, eventMonth] = event.date.split('-').map(Number);
+      return eventYear === year && (eventMonth - 1) === month;
+    }).length;
   };
 
   const styles = {
@@ -187,32 +188,44 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       transition: `opacity ${transitions.normal}`,
     } as React.CSSProperties,
     
-    dayCell: (isCurrentMonth: boolean, isToday: boolean, isSelected: boolean): React.CSSProperties => ({
-      aspectRatio: '1',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: borderRadius.md,
-      cursor: 'pointer',
-      transition: `all ${transitions.fast}`,
-      backgroundColor: isSelected 
-        ? colors.primary 
-        : isToday 
-          ? colors.primaryLight + '20' 
-          : isCurrentMonth 
-            ? colors.white 
-            : colors.gray50,
-      color: isSelected 
-        ? colors.white 
-        : isCurrentMonth 
-          ? colors.gray900 
-          : colors.gray400,
-      fontSize: typography.fontSize.sm,
-      fontWeight: isSelected ? typography.fontWeight.semibold : typography.fontWeight.normal,
-      position: 'relative' as const,
-      border: isToday && !isSelected ? `2px solid ${colors.primary}` : 'none',
-    }),
+    dayCell: (isCurrentMonth: boolean, isSelected: boolean, isHovered: boolean, dateStr: string): React.CSSProperties => {
+      let backgroundColor = colors.white;
+      let color = colors.gray900;
+      let fontWeight = typography.fontWeight.normal;
+      let transform = 'scale(1)';
+
+      if (isSelected) {
+        backgroundColor = colors.primary;
+        color = colors.white;
+        fontWeight = typography.fontWeight.semibold;
+      } else if (!isCurrentMonth) {
+        backgroundColor = colors.gray50;
+        color = colors.gray400;
+      }
+
+      if (isHovered && !isSelected) {
+        backgroundColor = hasEventsOnDate(dateStr) ? colors.gray100 : colors.gray50;
+        transform = 'scale(1.05)';
+      }
+
+      return {
+        aspectRatio: '1',
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: borderRadius.md,
+        cursor: 'pointer',
+        transition: `all ${transitions.fast}`,
+        backgroundColor,
+        color,
+        fontSize: typography.fontSize.sm,
+        fontWeight,
+        position: 'relative' as const,
+        border: 'none',
+        transform,
+      };
+    },
     
     eventIndicator: {
       position: 'absolute' as const,
@@ -237,7 +250,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       backgroundColor: colors.white + '90',
       backdropFilter: 'blur(4px)',
       display: 'flex',
-      flexDirection: 'column',
+      flexDirection: 'column' as const,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: borderRadius.lg,
@@ -282,27 +295,17 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDate(day);
       const hasEvents = hasEventsOnDate(dateStr);
-      const dayIsToday = isToday(day);
       const dayIsSelected = isSelected(day);
+      const dayIsHovered = hoveredDay === day;
       const eventsCount = getEventsForDate(dateStr).length;
       
       days.push(
         <button
           key={day}
-          style={styles.dayCell(true, dayIsToday, dayIsSelected)}
+          style={styles.dayCell(true, dayIsSelected, dayIsHovered, dateStr)}
           onClick={() => handleDayClick(dateStr)}
-          onMouseOver={(e) => {
-            if (!dayIsSelected) {
-              e.currentTarget.style.backgroundColor = hasEvents ? colors.gray100 : colors.gray50;
-              e.currentTarget.style.transform = 'scale(1.05)';
-            }
-          }}
-          onMouseOut={(e) => {
-            if (!dayIsSelected) {
-              e.currentTarget.style.backgroundColor = dayIsToday ? colors.primaryLight + '20' : colors.white;
-              e.currentTarget.style.transform = 'scale(1)';
-            }
-          }}
+          onMouseEnter={() => setHoveredDay(day)}
+          onMouseLeave={() => setHoveredDay(null)}
           title={hasEvents 
             ? `Событий: ${eventsCount}` 
             : 'Нет событий'}

@@ -26,7 +26,7 @@ import type {
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
 
-const apiBaseUrl = config.usersApiUrl;
+const apiBaseUrl = config.apiUrl;
 
 export const usersClient = {
   signUp: async (data: SignUpRequest): Promise<SignUpResponse> => {

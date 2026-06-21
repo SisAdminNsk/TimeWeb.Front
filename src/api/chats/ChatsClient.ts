@@ -9,7 +9,7 @@ import type {
 import { config } from '../../config/env';
 import { fetchWithTimeout, handleResponse } from '../HttpClient';
 
-const apiBaseUrl = config.chatsApiUrl;
+const apiBaseUrl = config.apiUrl;
 
 export const chatsClient = {
   getChatHistory: async (

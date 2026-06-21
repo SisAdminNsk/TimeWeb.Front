@@ -6,11 +6,8 @@ interface ChatWindowProps {
   chatId: string;
   onClose: () => void;
   currentUsername: string;
-  /** ✅ Заголовок чата: имя собеседника (для личных) или название группы */
   chatTitle?: string;
-  /** ✅ Флаг, что это личный чат (для отображения бейджа) */
   isPersonal?: boolean;
-  /** ✅ ID собеседника (опционально, для дополнительной логики) */
   participantId?: string;
 }
 
@@ -291,9 +288,45 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           background: colors.gray50,
           scrollbarWidth: 'thin',
           scrollbarColor: `${colors.gray300} ${colors.gray50}`,
+          position: 'relative',
         }}
       >
-        {isLoadingHistory && (
+        {/* ✅ ПОЛНОЭКРАННЫЙ ЛОАДЕР ПРИ ПЕРВОЙ ЗАГРУЗКЕ ЧАТА */}
+        {isLoadingHistory && messages.length === 0 && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.gray50,
+            zIndex: 5,
+            gap: spacing.md,
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              border: `4px solid ${colors.gray200}`,
+              borderTopColor: colors.primary,
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <div style={{
+              fontSize: typography.fontSize.sm || '13px',
+              color: colors.gray500,
+              fontWeight: typography.fontWeight.medium,
+            }}>
+              Открытие чата...
+            </div>
+          </div>
+        )}
+
+        {/* Маленький лоадер при подгрузке старой истории (скролл вверх) */}
+        {isLoadingHistory && messages.length > 0 && (
           <div style={{ textAlign: 'center', fontSize: '12px', color: colors.gray400, padding: '10px' }}>
             Загрузка истории...
           </div>

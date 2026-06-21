@@ -103,41 +103,43 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [executeWithAuth]);
 
-  const refreshFriends = useCallback(async (page: number = 1) => {
-    setIsLoading(true);
-    try {
-      let finalFriends: FriendshipDto[] = [];
-      const response = await executeWithAuth((token) => friendsClient.getFriends(token, page, PAGE_SIZE));
-      
-      let newTotalPages = Math.ceil(response.totalCount / PAGE_SIZE);
-      let newPage = page;
+const refreshFriends = useCallback(async (page: number = 1) => {
+  setIsLoading(true);
+  try {
+    const response = await executeWithAuth((token) => 
+      friendsClient.getFriends(token, page, PAGE_SIZE)
+    );
 
-      if (newTotalPages === 0) {
-        newPage = 1;
-        finalFriends = response.friends;
-      } else if (page > newTotalPages) {
-        newPage = newTotalPages;
-        const correctedResponse = await executeWithAuth((token) => friendsClient.getFriends(token, newPage, PAGE_SIZE));
-        finalFriends = correctedResponse.friends;
-        setFriendsTotalCount(correctedResponse.totalCount);
-      } else {
-        finalFriends = response.friends;
-        setFriendsTotalCount(response.totalCount);
-      }
+    let finalFriends = response.friends;
+    let newPage = page;
+    const newTotalPages = Math.ceil(response.totalCount / PAGE_SIZE);
 
-      setFriends(finalFriends);
-      setFriendsPage(newPage);
-      
-      await fetchFriendsStatuses(finalFriends);
-    } catch (err) {
-      let apiError = err as ApiError;
-      if(apiError.statusCode !== 401) {
-        setError(apiError);
-      }
-    } finally {
-      setIsLoading(false);
+    setFriendsTotalCount(response.totalCount);
+
+    if (newTotalPages === 0) {
+      newPage = 1;
+    } else if (page > newTotalPages) {
+      newPage = newTotalPages;
+      const correctedResponse = await executeWithAuth((token) => 
+        friendsClient.getFriends(token, newPage, PAGE_SIZE)
+      );
+      finalFriends = correctedResponse.friends;
+      setFriendsTotalCount(correctedResponse.totalCount);
     }
-  }, [executeWithAuth, fetchFriendsStatuses]);
+
+    setFriends(finalFriends);
+    setFriendsPage(newPage);
+    
+    await fetchFriendsStatuses(finalFriends);
+  } catch (err) {
+    let apiError = err as ApiError;
+    if (apiError.statusCode !== 401) {
+      setError(apiError);
+    }
+  } finally {
+    setIsLoading(false);
+  }
+}, [executeWithAuth, fetchFriendsStatuses]);
 
   const refreshIncomingInvites = useCallback(async (page: number = 1) => {
     setIsLoading(true);

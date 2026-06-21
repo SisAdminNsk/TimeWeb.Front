@@ -11,7 +11,6 @@ import ReCAPTCHA from 'react-google-recaptcha';
 
 const captchaSiteKey = config.captchaSiteKey;
 
-// === Утилиты ===
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const isValidEmail = (email: string): boolean => {
   if (!email || email.trim() === '') return false;
@@ -663,7 +662,7 @@ export const CabinetPage = () => {
   return (
     <div style={styles.container}>
       {isMobile && isSidebarOpen && <div style={{...styles.overlay,display:'block'}} onClick={()=>setIsSidebarOpen(false)}/>}
-      {isMobile && <header style={styles.mobileHeader}><button style={styles.menuBtn} onClick={()=>setIsSidebarOpen(!isMobile)} aria-label="Меню"><span style={styles.menuBar}/><span style={styles.menuBar}/><span style={styles.menuBar}/></button><h1 style={{...styles.pageTitle,margin:0,fontSize:18}}>Личный кабинет</h1><div style={{width:40}}/></header>}
+      {isMobile && <header style={styles.mobileHeader}><button style={styles.menuBtn} onClick={()=>setIsSidebarOpen(!isSidebarOpen)} aria-label="Меню"><span style={styles.menuBar}/><span style={styles.menuBar}/><span style={styles.menuBar}/></button><h1 style={{...styles.pageTitle,margin:0,fontSize:18}}>Личный кабинет</h1><div style={{width:40}}/></header>}
       <div style={styles.pageHeader}><div><h1 style={styles.pageTitle}>Личный кабинет</h1><p style={styles.pageDesc}>Управление профилем и настройками аккаунта</p></div></div>
       <div style={styles.layout}>
         <aside style={{...styles.sidebar,left:isMobile?(isSidebarOpen?'0':'-280px'):0}}>
