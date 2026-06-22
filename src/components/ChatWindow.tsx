@@ -9,6 +9,7 @@ interface ChatWindowProps {
   chatTitle?: string;
   isPersonal?: boolean;
   participantId?: string;
+  readOnly?: boolean; // ✅ Новый проп — только чтение
 }
 
 interface Message {
@@ -37,7 +38,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onClose,
   currentUsername,
   chatTitle,
-  isPersonal = false
+  isPersonal = false,
+  readOnly = false, // ✅ По умолчанию — можно писать
 }) => {
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   const [messageInput, setMessageInput] = useState('');
@@ -130,7 +132,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() || isSending || !isConnected) return;
+    if (!messageInput.trim() || isSending || !isConnected || readOnly) return;
 
     setIsSending(true);
     try {
@@ -144,7 +146,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     }
   };
 
-  // Формирование списка сообщений с разделителями дат
   const messagesWithSeparators: ChatListItem[] = messages.reduce((acc, msg, idx) => {
     const msgDate = new Date(msg.createdAt);
     const localDateKey = `${msgDate.getFullYear()}-${msgDate.getMonth()}-${msgDate.getDate()}`;
@@ -168,7 +169,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     return acc;
   }, [] as ChatListItem[]);
 
-  // Заголовок чата: используем chatTitle или дефолтное значение
   const headerTitle = chatTitle || (isPersonal ? 'Личный чат' : 'Чат');
 
   return (
@@ -197,7 +197,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         zIndex: 2
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-          {/* Аватар для личного чата */}
           {isPersonal && (
             <div style={{
               width: '28px',
@@ -226,7 +225,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             {headerTitle}
           </h3>
           
-          {/* Бейдж "личный" */}
           {isPersonal && (
             <span style={{ 
               fontSize: typography.fontSize.xs || '10px', 
@@ -240,9 +238,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               личный
             </span>
           )}
+
+          {/* ✅ Бейдж "Только чтение" для прошедших встреч */}
+          {readOnly && (
+            <span style={{
+              fontSize: typography.fontSize.xs || '10px',
+              color: colors.gray600,
+              backgroundColor: colors.gray200,
+              padding: `2px ${spacing.xs}`,
+              borderRadius: borderRadius.sm,
+              fontWeight: typography.fontWeight.medium,
+              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+            }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              архив
+            </span>
+          )}
         </div>
         
-        {/* Кнопка закрытия */}
         <button 
           onClick={onClose} 
           style={{ 
@@ -291,7 +310,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           position: 'relative',
         }}
       >
-        {/* ✅ ПОЛНОЭКРАННЫЙ ЛОАДЕР ПРИ ПЕРВОЙ ЗАГРУЗКЕ ЧАТА */}
         {isLoadingHistory && messages.length === 0 && (
           <div style={{
             position: 'absolute',
@@ -325,7 +343,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           </div>
         )}
 
-        {/* Маленький лоадер при подгрузке старой истории (скролл вверх) */}
         {isLoadingHistory && messages.length > 0 && (
           <div style={{ textAlign: 'center', fontSize: '12px', color: colors.gray400, padding: '10px' }}>
             Загрузка истории...
@@ -368,7 +385,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 maxWidth: '100%',
               }}
             >
-              {/* Имя отправителя (для чужих сообщений) */}
               {!isMine && (
                 <span style={{ 
                   fontSize: '11px', 
@@ -381,7 +397,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 </span>
               )}
               
-              {/* Пузырь сообщения */}
               <div style={{ 
                 padding: '8px 12px', 
                 borderRadius: '12px', 
@@ -391,6 +406,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                 maxWidth: '85%',
                 border: isMine ? 'none' : `1px solid ${colors.gray200}`,
                 wordBreak: 'break-word',
+                // ✅ Для архивных чатов — чуть приглушённый вид
+                opacity: readOnly ? 0.92 : 1,
               }}>
                 <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
                   {item.content}
@@ -409,7 +426,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           );
         })}
         
-        {/* Якорь для прокрутки вниз */}
         <div ref={messagesEndRef} style={{ height: '1px' }} />
       </div>
 
@@ -419,7 +435,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
           style={{ 
             position: 'absolute', 
-            bottom: '90px', 
+            bottom: readOnly ? '70px' : '90px', 
             left: '50%', 
             transform: 'translateX(-50%)', 
             backgroundColor: colors.primary, 
@@ -450,94 +466,120 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       )}
 
-      {/* INPUT AREA */}
-      <form 
-        onSubmit={handleSendMessage} 
-        style={{ 
-          padding: spacing.md, 
-          borderTop: `1px solid ${colors.gray200}`, 
-          display: 'flex', 
-          gap: spacing.sm, 
-          background: colors.white,
-          zIndex: 2
-        }}
-      >
-        <input
-          value={messageInput}
-          onChange={(e) => setMessageInput(e.target.value)}
-          placeholder="Напишите сообщение..."
+      {/* ✅ INPUT AREA — для readOnly показываем плашку вместо формы */}
+      {readOnly ? (
+        <div 
           style={{ 
-            flex: 1, 
-            padding: '12px 14px', 
-            borderRadius: borderRadius.md, 
-            border: `1px solid ${colors.gray300}`, 
-            outline: 'none',
-            fontSize: '14px',
-            transition: `border-color ${transitions.fast}, box-shadow ${transitions.fast}`,
-            backgroundColor: colors.white,
-            color: colors.gray900,
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = colors.primary;
-            e.target.style.boxShadow = `0 0 0 3px ${colors.primary}20`;
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = colors.gray300;
-            e.target.style.boxShadow = 'none';
-          }}
-          disabled={!isConnected}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSendMessage(e as any);
-            }
-          }}
-        />
-        <button 
-          type="submit" 
-          disabled={!messageInput.trim() || isSending || !isConnected}
-          style={{ 
-            padding: '0 24px', 
-            backgroundColor: colors.primary, 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: borderRadius.md, 
-            cursor: 'pointer',
-            fontWeight: typography.fontWeight.semibold,
-            fontSize: typography.fontSize.sm,
-            opacity: (!messageInput.trim() || isSending || !isConnected) ? 0.6 : 1,
-            transition: `all ${transitions.fast}`,
-            minWidth: '80px',
-          }}
-          onMouseOver={(e) => {
-            if (messageInput.trim() && !isSending && isConnected) {
-              e.currentTarget.style.backgroundColor = colors.primaryDark;
-            }
-          }}
-          onMouseOut={(e) => {
-            if (messageInput.trim() && !isSending && isConnected) {
-              e.currentTarget.style.backgroundColor = colors.primary;
-            }
+            padding: spacing.md, 
+            borderTop: `1px solid ${colors.gray200}`, 
+            background: colors.gray100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: spacing.sm,
+            zIndex: 2,
           }}
         >
-          {isSending ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ 
-                width: '12px', 
-                height: '12px', 
-                border: '2px solid rgba(255,255,255,0.3)', 
-                borderTopColor: 'white', 
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-                display: 'inline-block',
-              }} />
-              ...
-            </span>
-          ) : 'Отправить'}
-        </button>
-      </form>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.gray500} strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span style={{
+            fontSize: typography.fontSize.sm,
+            color: colors.gray600,
+            fontWeight: typography.fontWeight.medium,
+          }}>
+            Встреча состоялась — чат доступен только для чтения
+          </span>
+        </div>
+      ) : (
+        <form 
+          onSubmit={handleSendMessage} 
+          style={{ 
+            padding: spacing.md, 
+            borderTop: `1px solid ${colors.gray200}`, 
+            display: 'flex', 
+            gap: spacing.sm, 
+            background: colors.white,
+            zIndex: 2
+          }}
+        >
+          <input
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+            placeholder="Напишите сообщение..."
+            style={{ 
+              flex: 1, 
+              padding: '12px 14px', 
+              borderRadius: borderRadius.md, 
+              border: `1px solid ${colors.gray300}`, 
+              outline: 'none',
+              fontSize: '14px',
+              transition: `border-color ${transitions.fast}, box-shadow ${transitions.fast}`,
+              backgroundColor: colors.white,
+              color: colors.gray900,
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = colors.primary;
+              e.target.style.boxShadow = `0 0 0 3px ${colors.primary}20`;
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = colors.gray300;
+              e.target.style.boxShadow = 'none';
+            }}
+            disabled={!isConnected}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e as any);
+              }
+            }}
+          />
+          <button 
+            type="submit" 
+            disabled={!messageInput.trim() || isSending || !isConnected}
+            style={{ 
+              padding: '0 24px', 
+              backgroundColor: colors.primary, 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: borderRadius.md, 
+              cursor: 'pointer',
+              fontWeight: typography.fontWeight.semibold,
+              fontSize: typography.fontSize.sm,
+              opacity: (!messageInput.trim() || isSending || !isConnected) ? 0.6 : 1,
+              transition: `all ${transitions.fast}`,
+              minWidth: '80px',
+            }}
+            onMouseOver={(e) => {
+              if (messageInput.trim() && !isSending && isConnected) {
+                e.currentTarget.style.backgroundColor = colors.primaryDark;
+              }
+            }}
+            onMouseOut={(e) => {
+              if (messageInput.trim() && !isSending && isConnected) {
+                e.currentTarget.style.backgroundColor = colors.primary;
+              }
+            }}
+          >
+            {isSending ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ 
+                  width: '12px', 
+                  height: '12px', 
+                  border: '2px solid rgba(255,255,255,0.3)', 
+                  borderTopColor: 'white', 
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                  display: 'inline-block',
+                }} />
+                ...
+              </span>
+            ) : 'Отправить'}
+          </button>
+        </form>
+      )}
 
-      {/* Глобальные стили и анимации */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -549,7 +591,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           to { transform: rotate(360deg); }
         }
         
-        /* Кастомный скроллбар для сообщений */
         [style*="overflowY: auto"]::-webkit-scrollbar {
           width: 6px;
         }

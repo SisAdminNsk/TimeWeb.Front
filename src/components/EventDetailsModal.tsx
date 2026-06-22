@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useEvents } from '../context/EventsContext';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../styles/theme';
 import type { DetailedEventDto } from '../api/events/EventsContracts';
 import ChatWindow from './ChatWindow';
-import { FriendsSelectorForEvent } from './FriendsSelectorForEvent'; // 🆕
+import { FriendsSelectorForEvent } from './FriendsSelectorForEvent';
 
 interface EventDetailsModalProps {
   isOpen: boolean;
@@ -18,7 +18,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   onClose,
 }) => {
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
-  const { getEventDetails, removeMember, addMemberToEvent } = useEvents(); // 🆕 addMemberToEvent
+  const { getEventDetails, removeMember, addMemberToEvent } = useEvents();
   const { user } = useAuth();
   
   const [eventDetails, setEventDetails] = useState<DetailedEventDto | null>(null);
@@ -32,7 +32,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     participantUsername: string | null;
   }>({ isOpen: false, participantId: null, participantUsername: null });
 
-  // 🆕 Состояние для модального окна добавления участника
   const [addMemberModal, setAddMemberModal] = useState<{
     isOpen: boolean;
     isLoading: boolean;
@@ -54,9 +53,15 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     if (!isOpen) {
       setIsChatOpen(false);
       setConfirmDeleteModal({ isOpen: false, participantId: null, participantUsername: null });
-      setAddMemberModal({ isOpen: false, isLoading: false }); // 🆕
+      setAddMemberModal({ isOpen: false, isLoading: false });
     }
   }, [isOpen]);
+
+  // ✅ Проверяем, прошла ли встреча (сравниваем endAt с текущим моментом)
+  const isEventPassed = useMemo(() => {
+    if (!eventDetails?.endAt) return false;
+    return new Date(eventDetails.endAt).getTime() < Date.now();
+  }, [eventDetails?.endAt]);
 
   if (!isOpen || !eventId) return null;
 
@@ -140,7 +145,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   const hasChat = eventDetails?.chatId !== null && eventDetails?.chatId !== undefined;
 
   const handleConfirmRemoveMember = async () => {
-    const { participantId} = confirmDeleteModal;
+    const { participantId } = confirmDeleteModal;
     if (!participantId || !eventId) return;
     
     setRemovingMemberId(participantId);
@@ -160,7 +165,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     setConfirmDeleteModal({ isOpen: false, participantId: null, participantUsername: null });
   };
 
-  // 🆕 Обработчик добавления участника
   const handleAddMember = async (friendId: string) => {
     if (!eventId) return;
     
@@ -176,7 +180,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     }
   };
 
-  // 🆕 Обработчик отмены добавления
   const handleCancelAddMember = () => {
     setAddMemberModal({ isOpen: false, isLoading: false });
   };
@@ -217,6 +220,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             chatId={chatId}
             onClose={() => setIsChatOpen(false)}
             currentUsername={user?.name || ''}
+            readOnly={isEventPassed} // ✅ Передаём флаг "только чтение"
           />
         </div>
       </div>
@@ -225,7 +229,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
   return (
     <>
-      {/* Основное модальное окно */}
       <div
         style={{
           position: 'fixed',
@@ -258,6 +261,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* HEADER */}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.lg }}>
             <div>
               {isLoadingDetails ? (
@@ -269,7 +273,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }} />
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
                   <h3 style={{
                     margin: 0,
                     fontSize: typography.fontSize.xl,
@@ -278,7 +282,26 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   }}>
                     {eventDetails?.title || 'Загрузка...'}
                   </h3>
-                  {hasChat && (
+                  {/* ✅ Бейдж "Встреча состоялась" */}
+                  {isEventPassed && (
+                    <span style={{
+                      padding: `${spacing.xs} ${spacing.sm}`,
+                      backgroundColor: colors.gray200,
+                      color: colors.gray600,
+                      borderRadius: borderRadius.full,
+                      fontSize: typography.fontSize.xs,
+                      fontWeight: typography.fontWeight.semibold,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: spacing.xs,
+                    }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Состоялась
+                    </span>
+                  )}
+                  {hasChat && !isEventPassed && (
                     <span style={{
                       padding: `${spacing.xs} ${spacing.sm}`,
                       backgroundColor: colors.primary + '20',
@@ -325,6 +348,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             </button>
           </div>
 
+          {/* DATE BLOCK */}
           <div style={{ marginBottom: spacing.lg }}>
             {isLoadingDetails ? (
               <>
@@ -342,9 +366,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   padding: spacing.md,
                   backgroundColor: colors.gray50,
                   borderRadius: borderRadius.md,
-                  border: `1px solid ${colors.primary}`,
+                  border: `1px solid ${isEventPassed ? colors.gray300 : colors.primary}`,
+                  opacity: isEventPassed ? 0.85 : 1,
                 }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isEventPassed ? colors.gray500 : colors.primary} strokeWidth="2">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                     <line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" />
@@ -373,6 +398,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             )}
           </div>
 
+          {/* DESCRIPTION */}
           <div style={{ marginBottom: spacing.lg }}>
             <h4 style={{
               margin: `0 0 ${spacing.sm} 0`,
@@ -392,6 +418,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             </p>
           </div>
 
+          {/* PARTICIPANTS */}
           <div style={{ marginBottom: spacing.lg }}>
             <h4 style={{
               margin: `0 0 ${spacing.sm} 0`,
@@ -401,6 +428,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             }}>
               Участники
             </h4>
+
+          
             <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
               {isLoadingDetails ? (
                 [1, 2, 3].map(i => (
@@ -408,6 +437,12 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 ))
               ) : (
                 getParticipantsList().map((participant, index) => {
+                  // ✅ Кнопка "Исключить" показывается только если встреча не прошла
+                  const canRemoveMember = !participant.isOrganizer 
+                    && !participant.isCurrentUser 
+                    && isInitiator 
+                    && !isEventPassed;
+
                   return (
                     <div
                       key={participant.id || index}
@@ -476,8 +511,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                           })()
                         )}
                         
-                        {/* Кнопка удаления участника */}
-                        {!participant.isOrganizer && !participant.isCurrentUser && isInitiator && (
+                        {canRemoveMember && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -541,8 +575,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 })
               )}
               
-              {/* 🆕 Кнопка добавления участника - видна только организатору */}
-              {isInitiator && (
+              {/* ✅ Кнопка добавления участника — видна только организатору и только если встреча не прошла */}
+              {isInitiator && !isEventPassed && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -591,14 +625,14 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             </div>
           </div>
 
-          {/* Кнопка перехода в чат */}
+          {/* CHAT SECTION */}
           {isParticipant && hasChat && (
             <div style={{
               marginBottom: spacing.lg,
               padding: spacing.md,
-              backgroundColor: colors.primary + '10',
+              backgroundColor: isEventPassed ? colors.gray100 : colors.primary + '10',
               borderRadius: borderRadius.md,
-              border: `1px solid ${colors.primary}`,
+              border: `1px solid ${isEventPassed ? colors.gray300 : colors.primary}`,
             }}>
               <div style={{
                 display: 'flex',
@@ -606,24 +640,38 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 gap: spacing.sm,
                 marginBottom: spacing.sm,
               }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isEventPassed ? colors.gray500 : colors.primary} strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
                 <span style={{
                   fontSize: typography.fontSize.sm,
                   fontWeight: typography.fontWeight.semibold,
-                  color: colors.primary,
+                  color: isEventPassed ? colors.gray600 : colors.primary,
                 }}>
-                  Чат встречи
+                  {isEventPassed ? 'Чат встречи (архив)' : 'Чат встречи'}
                 </span>
               </div>
+
+              {/* ✅ Подсказка для прошедшей встречи */}
+              {isEventPassed && (
+                <p style={{
+                  margin: `0 0 ${spacing.sm} 0`,
+                  fontSize: typography.fontSize.xs,
+                  color: colors.gray600,
+                  fontStyle: 'italic',
+                  lineHeight: 1.4,
+                }}>
+                  Встреча уже состоялась. Переписка доступна только для чтения.
+                </p>
+              )}
+
               <button
                 onClick={() => setIsChatOpen(true)}
                 disabled={!user?.accessToken}
                 style={{
                   width: '100%',
                   padding: `${spacing.sm} ${spacing.md}`,
-                  backgroundColor: colors.primary,
+                  backgroundColor: isEventPassed ? colors.gray500 : colors.primary,
                   color: colors.white,
                   border: 'none',
                   borderRadius: borderRadius.md,
@@ -639,19 +687,21 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 }}
                 onMouseOver={(e) => {
                   if (user?.accessToken) {
-                    e.currentTarget.style.backgroundColor = colors.primaryDark || '#0056b3';
+                    e.currentTarget.style.backgroundColor = isEventPassed 
+                      ? (colors.gray600 || '#555') 
+                      : (colors.primaryDark || '#0056b3');
                   }
                 }}
                 onMouseOut={(e) => {
                   if (user?.accessToken) {
-                    e.currentTarget.style.backgroundColor = colors.primary;
+                    e.currentTarget.style.backgroundColor = isEventPassed ? colors.gray500 : colors.primary;
                   }
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                Открыть чат
+                {isEventPassed ? 'Читать' : 'Открыть чат'}
               </button>
             </div>
           )}
@@ -717,7 +767,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         </div>
       </div>
 
-      {/* 🆕 Модальное окно подтверждения удаления участника */}
+      {/* Модалка подтверждения удаления участника */}
       {confirmDeleteModal.isOpen && (
         <div
           style={{
@@ -847,7 +897,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         </div>
       )}
 
-      {/* 🆕 Модальное окно добавления участника */}
+      {/* Модалка добавления участника */}
       {addMemberModal.isOpen && eventDetails && (
         <FriendsSelectorForEvent
           existingParticipantIds={getParticipantsList().map(p => p.id).filter(Boolean) as string[]}
@@ -856,7 +906,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         />
       )}
 
-      {/* 🔄 Оверлей загрузки при отправке приглашения */}
       {addMemberModal.isOpen && addMemberModal.isLoading && (
         <div
           style={{

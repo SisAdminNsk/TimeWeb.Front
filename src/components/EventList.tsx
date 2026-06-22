@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useEvents } from '../context/EventsContext';
 import { useToast } from '../context/ToastContext';
 import { theme } from '../styles/theme';
@@ -16,6 +16,16 @@ export const EventsList: React.FC<EventsListProps> = ({
     const { getEventsForDate, deleteEvent, isLoading, initiatorEvents } = useEvents();
     const { addToast } = useToast();
     const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
+
+    // ✅ Проверяем, прошла ли выбранная дата
+    const isDatePassed = useMemo(() => {
+        if (!selectedDate) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selected = new Date(selectedDate);
+        selected.setHours(0, 0, 0, 0);
+        return selected.getTime() < today.getTime();
+    }, [selectedDate]);
     
     const [deleteModal, setDeleteModal] = useState<{
         isOpen: boolean;
@@ -164,6 +174,12 @@ export const EventsList: React.FC<EventsListProps> = ({
             fontWeight: typography.fontWeight.semibold,
             color: colors.gray900,
         } as React.CSSProperties,
+        addButtonWrapper: {
+            display: 'flex',
+            flexDirection: 'column' as const,
+            alignItems: 'flex-end',
+            gap: spacing.xs,
+        } as React.CSSProperties,
         addButton: {
             backgroundColor: colors.primary,
             color: colors.white,
@@ -177,6 +193,30 @@ export const EventsList: React.FC<EventsListProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: spacing.xs,
+        } as React.CSSProperties,
+        addButtonDisabled: {
+            backgroundColor: colors.gray300,
+            color: colors.gray500,
+            border: 'none',
+            borderRadius: borderRadius.md,
+            padding: `${spacing.sm} ${spacing.md}`,
+            fontSize: typography.fontSize.sm,
+            fontWeight: typography.fontWeight.medium,
+            cursor: 'not-allowed',
+            transition: `all ${transitions.normal}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacing.xs,
+            opacity: 0.7,
+        } as React.CSSProperties,
+        hint: {
+            fontSize: typography.fontSize.xs,
+            color: colors.gray500,
+            fontStyle: 'italic',
+            maxWidth: '180px',
+            textAlign: 'right' as const,
+            lineHeight: 1.3,
+            margin: 0,
         } as React.CSSProperties,
         dateTitle: {
             fontSize: typography.fontSize.base,
@@ -241,7 +281,6 @@ export const EventsList: React.FC<EventsListProps> = ({
             marginBottom: spacing.sm,
             lineHeight: 1.5,
         } as React.CSSProperties,
-        // ✅ Обновлённый стиль для счётчика участников
         eventParticipants: {
             fontSize: typography.fontSize.xs,
             color: colors.gray500,
@@ -262,7 +301,9 @@ export const EventsList: React.FC<EventsListProps> = ({
         } as React.CSSProperties,
         deleteButtonContainer: {
             display: 'flex',
-            justifyContent: 'flex-end',
+            flexDirection: 'column' as const,
+            alignItems: 'flex-end',
+            gap: spacing.xs,
             marginTop: spacing.sm,
             paddingTop: spacing.sm,
             borderTop: `1px dashed ${colors.gray200}`,
@@ -280,6 +321,32 @@ export const EventsList: React.FC<EventsListProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: spacing.xs,
+        } as React.CSSProperties,
+        // ✅ Стили для заблокированной кнопки удаления
+        deleteButtonDisabled: {
+            backgroundColor: 'transparent',
+            border: `1px solid ${colors.gray300}`,
+            color: colors.gray400,
+            cursor: 'not-allowed',
+            fontSize: typography.fontSize.xs,
+            fontWeight: typography.fontWeight.medium,
+            padding: `${spacing.xs} ${spacing.md}`,
+            borderRadius: borderRadius.md,
+            transition: `all ${transitions.fast}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacing.xs,
+            opacity: 0.6,
+        } as React.CSSProperties,
+        // ✅ Подсказка под заблокированной кнопкой удаления
+        deleteHint: {
+            fontSize: typography.fontSize.xs,
+            color: colors.gray500,
+            fontStyle: 'italic',
+            maxWidth: '200px',
+            textAlign: 'right' as const,
+            lineHeight: 1.3,
+            margin: 0,
         } as React.CSSProperties,
         noDateSelected: {
             textAlign: 'center' as const,
@@ -418,28 +485,52 @@ export const EventsList: React.FC<EventsListProps> = ({
                         <h3 style={styles.title}>Встречи</h3>
                         <p style={styles.dateTitle}>{formatDate(selectedDate)}</p>
                     </div>
-                    <button
-                        style={styles.addButton}
-                        onClick={onAddEvent}
-                        disabled={isLoading}
-                        onMouseOver={(e) => {
-                            if (!isLoading) e.currentTarget.style.backgroundColor = colors.primaryDark;
-                        }}
-                        onMouseOut={(e) => {
-                            if (!isLoading) e.currentTarget.style.backgroundColor = colors.primary;
-                        }}
-                    >
-                        <span>+</span>
-                        Добавить
-                    </button>
+
+                    <div style={styles.addButtonWrapper}>
+                        <button
+                            style={isDatePassed ? styles.addButtonDisabled : styles.addButton}
+                            onClick={onAddEvent}
+                            disabled={isLoading || isDatePassed}
+                            onMouseOver={(e) => {
+                                if (!isLoading && !isDatePassed) {
+                                    e.currentTarget.style.backgroundColor = colors.primaryDark;
+                                }
+                            }}
+                            onMouseOut={(e) => {
+                                if (!isLoading && !isDatePassed) {
+                                    e.currentTarget.style.backgroundColor = colors.primary;
+                                }
+                            }}
+                            title={isDatePassed ? 'Нельзя добавить встречу на прошедшую дату' : undefined}
+                        >
+                            <span>+</span>
+                            Добавить
+                        </button>
+                        {isDatePassed && (
+                            <span style={styles.hint}>
+                                Добавить встречу можно только на предстоящие дни
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {events.length === 0 ? (
                     <div style={styles.emptyState}>
-                        <p>На этот день нет запланированных встреч</p>
-                        <p style={{ fontSize: typography.fontSize.sm, marginTop: spacing.sm }}>
-                            Нажмите «Добавить», чтобы создать новую встречу
-                        </p>
+                        {isDatePassed ? (
+                            <>
+                                <p>На эту дату встреч не было</p>
+                                <p style={{ fontSize: typography.fontSize.sm, marginTop: spacing.sm }}>
+                                    Создание встреч доступно только для будущих дат
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p>На этот день нет запланированных встреч</p>
+                                <p style={{ fontSize: typography.fontSize.sm, marginTop: spacing.sm }}>
+                                    Нажмите «Добавить», чтобы создать новую встречу
+                                </p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div>
@@ -482,7 +573,6 @@ export const EventsList: React.FC<EventsListProps> = ({
                                     {event.description && (
                                         <p style={styles.eventDescription}>{event.description}</p>
                                     )}
-                                    {/* ✅ Отображаем количество участников вместо списка */}
                                     <div style={styles.eventParticipants}>
                                         <span style={styles.participantsBadge}>
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -497,25 +587,27 @@ export const EventsList: React.FC<EventsListProps> = ({
                                     {isOrganizer && (
                                         <div style={styles.deleteButtonContainer}>
                                             <button
-                                                style={styles.deleteButton}
+                                                style={isDatePassed ? styles.deleteButtonDisabled : styles.deleteButton}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleDeleteClick(event.id, event.title);
+                                                    if (!isDatePassed) {
+                                                        handleDeleteClick(event.id, event.title);
+                                                    }
                                                 }}
-                                                disabled={isLoading}
+                                                disabled={isLoading || isDatePassed}
                                                 onMouseOver={(e) => {
-                                                    if (!isLoading) {
+                                                    if (!isLoading && !isDatePassed) {
                                                         e.currentTarget.style.backgroundColor = colors.error;
                                                         e.currentTarget.style.color = colors.white;
                                                     }
                                                 }}
                                                 onMouseOut={(e) => {
-                                                    if (!isLoading) {
+                                                    if (!isLoading && !isDatePassed) {
                                                         e.currentTarget.style.backgroundColor = 'transparent';
                                                         e.currentTarget.style.color = colors.error;
                                                     }
                                                 }}
-                                                title="Удалить встречу"
+                                                title={isDatePassed ? 'Нельзя удалить встречу на прошедшую дату' : 'Удалить встречу'}
                                             >
                                                 <svg
                                                     width="14"
@@ -532,6 +624,11 @@ export const EventsList: React.FC<EventsListProps> = ({
                                                 </svg>
                                                 Удалить
                                             </button>
+                                            {isDatePassed && (
+                                                <span style={styles.deleteHint}>
+                                                    Встреча уже прошла, удаление недоступно
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -586,7 +683,6 @@ export const EventsList: React.FC<EventsListProps> = ({
                             </div>
                         )}
                         
-                        {/* Поле для ввода причины удаления */}
                         <div style={{ marginBottom: spacing.lg }}>
                             <label style={{
                                 display: 'block',
