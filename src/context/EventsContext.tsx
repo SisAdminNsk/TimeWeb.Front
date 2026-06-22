@@ -10,6 +10,7 @@ import type {
   CreateEventRequest
 } from '../api/events/EventsContracts';
 import { getIdFromJwt } from '../common/JwtHelper';
+import { convertKrasnoyarskToUTC } from '../common/TimeHelper';
 
 export interface CalendarEvent {
   id: string;
@@ -219,8 +220,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       const createEventReq: CreateEventRequest = {
         title: eventData.title,
         description: eventData.description,
-        startAt: `${eventData.date}T${eventData.startTime}`,
-        endAt: `${eventData.date}T${eventData.endTime}`,
+        startAt: convertKrasnoyarskToUTC(eventData.date, eventData.startTime),
+        endAt: convertKrasnoyarskToUTC(eventData.date, eventData.endTime),
         memberIds: eventData.friendIds,
         needChat: eventData.needChat ?? false,
       };

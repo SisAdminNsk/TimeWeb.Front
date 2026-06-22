@@ -352,7 +352,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   </svg>
                   <div>
                     <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, color: colors.gray900 }}>
-                      Дата и время проведения
+                      Дата и время проведения (GMT+7)
                     </div>
                     <div style={{ fontSize: typography.fontSize.sm, color: colors.gray700 }}>
                       {formatDateRange(eventDetails.startAt, eventDetails.endAt)}

@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationsContext';
-import { useEvents } from '../context/EventsContext';
 import { theme } from '../styles/theme';
 import ToastContainer from '../components/ToastContainer';
 
 export const LayoutPage = () => {
   const { user, logout } = useAuth();
-  const { totalNotificationsCount } = useNotifications();
-  const { events, initiatorEvents } = useEvents();
   const navigate = useNavigate();
   const location = useLocation();
   const { colors, typography, spacing, borderRadius, transitions, shadows } = theme;
@@ -78,21 +74,6 @@ export const LayoutPage = () => {
       setIsMobileMenuOpen(false);
     }
   };
-
-  // Подсчет всех событий на текущий месяц
-  const getEventsCountForMonth = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    const allEvents = [...events, ...initiatorEvents];
-    return allEvents.filter(event => {
-      const eventDate = new Date(event.date);
-      return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
-    }).length;
-  };
-
-  const eventsCountForMonth = getEventsCountForMonth();
 
   const containerStyle: React.CSSProperties = {
     display: 'flex',
@@ -197,22 +178,6 @@ export const LayoutPage = () => {
     fontWeight: location.pathname === path ? typography.fontWeight.semibold : typography.fontWeight.normal,
     fontSize: typography.fontSize.sm,
   });
-
-  const notificationBadgeStyle: React.CSSProperties = {
-    minWidth: '20px',
-    height: '20px',
-    padding: `0 ${spacing.xs}`,
-    backgroundColor: totalNotificationsCount > 0 ? colors.error : colors.gray400,
-    color: colors.white,
-    borderRadius: borderRadius.full,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 'auto',
-    transition: `all ${transitions.fast}`,
-  };
 
   const userProfileStyle: React.CSSProperties = {
     borderTop: `1px solid ${colors.sidebar.border}`,

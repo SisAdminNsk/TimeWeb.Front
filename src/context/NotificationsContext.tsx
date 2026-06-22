@@ -64,6 +64,7 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
   const newNotificationTimersRef = useRef<Map<string, number>>(new Map());
   
   const hasLoadedOnce = useRef(false);
+  const hasPollingInitializedOnce = useRef(false);
 
   const fetchEventDetails = useCallback(async (eventId: string, includeDeleted: boolean = false): Promise<DetailedEventDto | null> => {
     try {
@@ -242,8 +243,8 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         'EventDeclined': 'отмена встречи',
       };
 
-      // Получаем уведомления для всех трех типов параллельно
-      const results = await Promise.all(
+      // 1. Получаем count для всех типов (для обновления счетчиков)
+      const countResults = await Promise.all(
         NOTIFICATION_TYPES.map(async (notifType) => {
           try {
             const req = {
@@ -270,69 +271,86 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
         })
       );
 
-      // Обновляем счетчики
       const newTypeCounts = {
         NewEvent: 0,
         EventUpdated: 0,
         EventDeclined: 0,
       };
 
-      // Проверяем каждый тип на новые уведомления
-      results.forEach(result => {
+      // 2. Обновляем счетчики и проверяем на новые уведомления для всех типов
+      countResults.forEach(result => {
         const { type: notifType, totalCount, notifications } = result;
         newTypeCounts[notifType] = totalCount;
 
-        if (hasLoadedOnce.current) {
-          const currentIds = new Set<string>();
-          const newIds = new Set<string>();
+        const currentIds = new Set<string>();
+        const newIds = new Set<string>();
 
-          notifications.forEach(n => {
-            const id = `${n.eventId}-${n.createdAt}`;
-            currentIds.add(id);
-            
-            if (!previousNotificationsByType.current[notifType].has(id)) {
-              newIds.add(id);
-            }
-          });
-
-          // Если есть новые уведомления, показываем toast
-          if (newIds.size > 0) {
-            const label = typeLabels[notifType];
-            const message = newIds.size === 1 
-              ? `${label}` 
-              : `${label}: ${newIds.size}`;
-
-            addToast({
-              title: 'Новое уведомление',
-              message: message,
-              type: 'info',
-            });
-
-            console.log(`[Notifications] Новых ${notifType}: ${newIds.size}`);
+        notifications.forEach(n => {
+          const id = `${n.eventId}-${n.createdAt}`;
+          currentIds.add(id);
+          
+          if (hasPollingInitializedOnce.current && !previousNotificationsByType.current[notifType].has(id)) {
+            newIds.add(id);
           }
+        });
 
-          // Обновляем предыдущие ID для этого типа
-          previousNotificationsByType.current[notifType] = currentIds;
-        } else {
-          // При первой загрузке просто запоминаем ID
-          const currentIds = new Set<string>();
-          notifications.forEach(n => {
-            const id = `${n.eventId}-${n.createdAt}`;
-            currentIds.add(id);
+        // Показываем toast только если это не первая инициализация и есть реально новые
+        if (hasPollingInitializedOnce.current && newIds.size > 0) {
+          const label = typeLabels[notifType];
+          const message = newIds.size === 1 
+            ? `${label}` 
+            : `${label}: ${newIds.size}`;
+
+          addToast({
+            title: 'Новое уведомление',
+            message: message,
+            type: 'info',
           });
-          previousNotificationsByType.current[notifType] = currentIds;
+
+          console.log(`[Notifications] Новых ${notifType}: ${newIds.size}`);
         }
+
+        // Обновляем памятку для следующего polling'а
+        previousNotificationsByType.current[notifType] = currentIds;
       });
 
       setTypeCounts(newTypeCounts);
 
-      if (!hasLoadedOnce.current) {
-        hasLoadedOnce.current = true;
+      // 3. Получаем полные данные для текущего активного типа (для обновления списка)
+      try {
+        const currentTypeReq = {
+          eventId: null,
+          type: type,
+          recipientStatus: 'NoReaction' as const,
+          includeDeleted: type === 'EventDeclined' || type === 'EventUpdated',
+          pageSize: PAGE_SIZE,
+          pageNumber: page,
+        } as SearchNotificationsRequest;
+
+        const currentTypeResp: SearchNotificationsResponse = await executeWithAuth(token => {
+          if (!token) {
+            throw new Error('Auth token is missing');
+          }
+          return eventsClient.searchNotifications(token, currentTypeReq);
+        });
+
+        if (currentTypeResp) {
+          setNotifications(currentTypeResp.notifications);
+          setTotalCount(currentTypeResp.totalCount);
+          console.log(`[Notifications] Список для ${type} обновлен: ${currentTypeResp.notifications.length} уведомлений`);
+        }
+      } catch (err) {
+        console.error('[Notifications] Ошибка при получении полного списка:', err);
+      }
+
+      if (!hasPollingInitializedOnce.current) {
+        hasPollingInitializedOnce.current = true;
+        console.log('[Notifications] Polling инициализирован, будут показаны только новые уведомления');
       }
     } catch (err) {
       console.error('[Notifications] Ошибка при polling всех типов:', err);
     }
-  }, [executeWithAuth, addToast]);
+  }, [executeWithAuth, addToast, type, page]);
 
   const onAccept = useCallback(async (eventId: string) => {
     console.log('[Notifications] Принятие события:', eventId);
@@ -404,7 +422,6 @@ export const NotificationsProvider = ({ children }: { children: ReactNode }) => 
     refreshNotifications(type, page, false);
     
     const interval = setInterval(() => {
-      // Polling для всех типов одновременно
       pollAllNotifications();
     }, POLLING_INTERVAL);
 

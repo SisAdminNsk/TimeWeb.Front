@@ -364,7 +364,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.label}>Время проведения *</label>
+              <label style={styles.label}>Время проведения * (GMT+7)</label>
               <div style={styles.timeRow}>
                 <div>
                   <input

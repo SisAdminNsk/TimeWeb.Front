@@ -302,7 +302,7 @@ const ScheduleSection: React.FC<{ scheduleDate: string; scheduleEvents: Array<{i
 
   return (
     <div style={styles.sectionCard}>
-      <div style={styles.sectionHeader}><h2 style={styles.sectionTitle}>Расписание</h2><p style={styles.sectionDesc}>Встречи и события на выбранный день</p></div>
+      <div style={styles.sectionHeader}><h2 style={styles.sectionTitle}>Расписание</h2><p style={styles.sectionDesc}>Встречи и события на выбранный день (GMT+7)</p></div>
       <div style={styles.sectionBody}>
         <div style={styles.scheduleControls}>
           <button onClick={() => onDateChange(addDays(scheduleDate, -1))} style={styles.btnSecondary} title="Предыдущий день"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg></button>
