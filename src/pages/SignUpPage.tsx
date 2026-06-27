@@ -209,7 +209,7 @@ export const SignUpPage = () => {
               onChange={(e) => setName(e.target.value)}
               disabled={isSubmitting || successNotification !== null}
               style={inputStyle}
-              placeholder="Введите имя"
+              placeholder="Придумайте имя"
               onFocus={(e) => e.target.style.borderColor = colors.primary}
               onBlur={(e) => e.target.style.borderColor = colors.gray300}
             />

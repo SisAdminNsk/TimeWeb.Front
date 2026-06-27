@@ -66,6 +66,7 @@ interface EventsContextType {
 
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
 
+// ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ: используем локальное время вместо UTC
 const convertApiEventToCalendarEvent = (
   apiEvent: ApiEventDto, 
   isInitiator: boolean = false
@@ -73,13 +74,27 @@ const convertApiEventToCalendarEvent = (
   const startDate = new Date(apiEvent.startAt);
   const endDate = new Date(apiEvent.endAt);
   
+  // ✅ Вспомогательные функции для работы с ЛОКАЛЬНЫМ временем
+  const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const formatTimeLocal = (date: Date): string => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+  
   return {
     id: apiEvent.id,
     title: apiEvent.title,
     description: apiEvent.description || '',
-    date: startDate.toISOString().substring(0, 10),
-    startTime: startDate.toTimeString().substring(0, 5),
-    endTime: endDate.toTimeString().substring(0, 5),
+    date: formatDateLocal(startDate),        // ✅ Локальная дата (не UTC!)
+    startTime: formatTimeLocal(startDate),   // ✅ Локальное время (не UTC!)
+    endTime: formatTimeLocal(endDate),       // ✅ Локальное время (не UTC!)
     friendIds: apiEvent.members?.map(m => m.id) || [],
     createdAt: apiEvent.createdAt,
     isInitiator,

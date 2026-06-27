@@ -64,11 +64,14 @@ const validatePassword = (password: string): string | null => {
   if (!password || password.length < 8) {
     return 'Пароль должен содержать не менее 8 символов';
   }
-  if (!/[A-Z]/.test(password)) {
-    return 'Пароль должен содержать хотя бы одну заглавную букву';
+  if (password.length > 100) {
+    return 'Пароль не должен превышать 100 символов';
   }
-  if (!/[a-z]/.test(password)) {
-    return 'Пароль должен содержать хотя бы одну строчную букву';
+  if (!/[a-zа-яё]/.test(password)) {
+    return 'Пароль должен содержать хотя бы одну строчную букву (латинскую или русскую)';
+  }
+  if (!/[A-ZА-ЯЁ]/.test(password)) {
+    return 'Пароль должен содержать хотя бы одну заглавную букву (латинскую или русскую)';
   }
   if (!/[0-9]/.test(password)) {
     return 'Пароль должен содержать хотя бы одну цифру';
@@ -88,7 +91,7 @@ export const SignInPage = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationId, setVerificationId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // 🔐 Новое поле подтверждения
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [resetToken, setResetToken] = useState<string | null>(null);
   
   const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
@@ -451,10 +454,11 @@ export const SignInPage = () => {
   const getPasswordStrength = (pwd: string): { width: string; color: string; label: string } => {
     let strength = 0;
     if (pwd.length >= 8) strength++;
-    if (/[A-Z]/.test(pwd)) strength++;
-    if (/[a-z]/.test(pwd)) strength++;
+    if (pwd.length >= 12) strength++;
+    if (/[A-ZА-ЯЁ]/.test(pwd)) strength++;
+    if (/[a-zа-яё]/.test(pwd)) strength++;
     if (/[0-9]/.test(pwd)) strength++;
-    if (/[^A-Za-z0-9]/.test(pwd)) strength++;
+    if (/[^A-Za-zА-Яа-яЁё0-9]/.test(pwd)) strength++;
 
     if (strength <= 2) return { width: '33%', color: colors.error, label: 'Слабый' };
     if (strength <= 4) return { width: '66%', color: colors.warning || '#f59e0b', label: 'Средний' };
@@ -759,11 +763,12 @@ export const SignInPage = () => {
                 backgroundColor: colors.gray50,
                 borderRadius: borderRadius.md
               }}>
-                <strong>Требования:</strong>
+                <strong>Требования к паролю:</strong>
                 <ul style={{ margin: `${spacing.xs} 0 0`, paddingLeft: spacing.lg }}>
-                  <li>Минимум 8 символов</li>
-                  <li>Заглавная и строчная буквы</li>
-                  <li>Хотя бы одна цифра</li>
+                  <li>От 8 до 100 символов</li>
+                  <li>Хотя бы одна заглавная буква (латинская или русская)</li>
+                  <li>Хотя бы одна строчная буква (латинская или русская)</li>
+                  <li>Минимум одна цифра</li>
                 </ul>
               </div>
             </>

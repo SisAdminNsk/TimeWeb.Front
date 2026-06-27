@@ -357,7 +357,7 @@ export const NotificationsPage: React.FC = () => {
                             <polyline points="12 6 12 12 16 14" />
                           </svg>
                           <span>
-                            {new Date(eventDetails.startAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - {new Date(eventDetails.endAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} <span style={{fontSize: typography.fontSize.xs, color: colors.gray500}}>(GMT+7)</span>
+                            {new Date(eventDetails.startAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} - {new Date(eventDetails.endAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} 
                           </span>
                         </div>
                       </div>

@@ -1,3 +1,4 @@
+// EventsList.tsx
 import React, { useState, useMemo } from 'react';
 import { useEvents } from '../context/EventsContext';
 import { useToast } from '../context/ToastContext';
@@ -17,7 +18,6 @@ export const EventsList: React.FC<EventsListProps> = ({
     const { addToast } = useToast();
     const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
 
-    // ✅ Проверяем, прошла ли выбранная дата
     const isDatePassed = useMemo(() => {
         if (!selectedDate) return false;
         const today = new Date();
@@ -26,6 +26,78 @@ export const EventsList: React.FC<EventsListProps> = ({
         selected.setHours(0, 0, 0, 0);
         return selected.getTime() < today.getTime();
     }, [selectedDate]);
+    
+    // ✅ Вспомогательная функция: парсит время в минуты от начала суток
+    const parseTimeToMinutes = (timeStr: string): number | null => {
+        if (!timeStr) return null;
+        if (typeof timeStr !== 'string' || !timeStr.includes(':')) return null;
+        
+        let hours = NaN;
+        let minutes = NaN;
+        
+        if (timeStr.includes('T')) {
+            const date = new Date(timeStr);
+            hours = date.getHours();
+            minutes = date.getMinutes();
+        } else {
+            const parts = timeStr.split(':');
+            hours = parseInt(parts[0], 10);
+            minutes = parseInt(parts[1], 10);
+        }
+        
+        if (isNaN(hours) || isNaN(minutes)) return null;
+        return hours * 60 + minutes;
+    };
+    
+    // ✅ Проверяет, прошла ли встреча (текущее время >= времени окончания)
+    const checkIsEventPassed = (event: any) => {
+        if (!selectedDate) return false;
+        
+        const today = new Date();
+        const selected = new Date(selectedDate);
+        selected.setHours(0, 0, 0, 0);
+        const todayNormalized = new Date(today);
+        todayNormalized.setHours(0, 0, 0, 0);
+        
+        if (selected.getTime() < todayNormalized.getTime()) {
+            return true;
+        }
+        
+        if (selected.getTime() === todayNormalized.getTime()) {
+            const endMinutes = parseTimeToMinutes(event.endTime);
+            if (endMinutes === null) return false;
+            
+            const currentMinutes = today.getHours() * 60 + today.getMinutes();
+            return currentMinutes >= endMinutes;
+        }
+        
+        return false;
+    };
+    
+    // ✅ Проверяет, идет ли встреча прямо сейчас
+    const checkIsEventOngoing = (event: any) => {
+        if (!selectedDate) return false;
+        
+        const today = new Date();
+        const selected = new Date(selectedDate);
+        selected.setHours(0, 0, 0, 0);
+        const todayNormalized = new Date(today);
+        todayNormalized.setHours(0, 0, 0, 0);
+        
+        // Только для сегодняшнего дня
+        if (selected.getTime() !== todayNormalized.getTime()) {
+            return false;
+        }
+        
+        const startMinutes = parseTimeToMinutes(event.startTime);
+        const endMinutes = parseTimeToMinutes(event.endTime);
+        
+        if (startMinutes === null || endMinutes === null) return false;
+        
+        const currentMinutes = today.getHours() * 60 + today.getMinutes();
+        
+        return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    };
     
     const [deleteModal, setDeleteModal] = useState<{
         isOpen: boolean;
@@ -89,6 +161,21 @@ export const EventsList: React.FC<EventsListProps> = ({
             return;
         }
         
+        const event = events.find(e => e.id === eventId);
+        if (!event) return;
+        
+        if (checkIsEventOngoing(event)) {
+            setDeleteError('Нельзя удалить встречу, которая сейчас идет');
+            setTimeout(() => setDeleteError(null), 3000);
+            return;
+        }
+        
+        if (checkIsEventPassed(event)) {
+            setDeleteError('Нельзя удалить встречу, которая уже прошла');
+            setTimeout(() => setDeleteError(null), 3000);
+            return;
+        }
+        
         setDeleteModal({
             isOpen: true,
             eventId,
@@ -109,6 +196,33 @@ export const EventsList: React.FC<EventsListProps> = ({
                 setDeleteModal({ isOpen: false, eventId: null, eventTitle: null, deletedReason: '' });
                 setTimeout(() => setDeleteError(null), 3000);
                 return;
+            }
+            
+            const event = events.find(e => e.id === deleteModal.eventId);
+            if (event) {
+                if (checkIsEventOngoing(event)) {
+                    setDeleteError('Нельзя удалить встречу, которая сейчас идет');
+                    addToast({
+                        title: 'Ошибка',
+                        message: 'Встреча сейчас идет и не может быть удалена',
+                        type: 'error',
+                    });
+                    setDeleteModal({ isOpen: false, eventId: null, eventTitle: null, deletedReason: '' });
+                    setTimeout(() => setDeleteError(null), 3000);
+                    return;
+                }
+                
+                if (checkIsEventPassed(event)) {
+                    setDeleteError('Нельзя удалить встречу, которая уже прошла');
+                    addToast({
+                        title: 'Ошибка',
+                        message: 'Встреча уже прошла и не может быть удалена',
+                        type: 'error',
+                    });
+                    setDeleteModal({ isOpen: false, eventId: null, eventTitle: null, deletedReason: '' });
+                    setTimeout(() => setDeleteError(null), 3000);
+                    return;
+                }
             }
             
             try {
@@ -253,11 +367,28 @@ export const EventsList: React.FC<EventsListProps> = ({
             alignItems: 'center',
             gap: spacing.xs,
         } as React.CSSProperties,
+        // ✅ Шильдик "Идет сейчас"
+        ongoingBadge: {
+            position: 'absolute' as const,
+            top: spacing.sm,
+            right: spacing.sm,
+            backgroundColor: colors.success || '#10b981',
+            color: colors.white,
+            padding: `${spacing.xs} ${spacing.sm}`,
+            borderRadius: borderRadius.full,
+            fontSize: typography.fontSize.xs,
+            fontWeight: typography.fontWeight.semibold,
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacing.xs,
+            animation: 'pulse 2s infinite',
+        } as React.CSSProperties,
         eventHeader: {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
             marginBottom: spacing.sm,
+            paddingRight: '100px', // ✅ Отступ под бейдж
         } as React.CSSProperties,
         eventTitle: {
             margin: 0,
@@ -322,7 +453,6 @@ export const EventsList: React.FC<EventsListProps> = ({
             alignItems: 'center',
             gap: spacing.xs,
         } as React.CSSProperties,
-        // ✅ Стили для заблокированной кнопки удаления
         deleteButtonDisabled: {
             backgroundColor: 'transparent',
             border: `1px solid ${colors.gray300}`,
@@ -338,7 +468,6 @@ export const EventsList: React.FC<EventsListProps> = ({
             gap: spacing.xs,
             opacity: 0.6,
         } as React.CSSProperties,
-        // ✅ Подсказка под заблокированной кнопкой удаления
         deleteHint: {
             fontSize: typography.fontSize.xs,
             color: colors.gray500,
@@ -538,6 +667,10 @@ export const EventsList: React.FC<EventsListProps> = ({
                             const isOrganizer = isInitiator(event.id);
                             const participantsCount = getParticipantsCount(event.friendIds);
                             const participantsText = formatParticipantsText(participantsCount);
+                            const hasEventPassed = checkIsEventPassed(event);
+                            const isEventOngoing = checkIsEventOngoing(event);
+                            // ✅ Кнопка заблокирована, если встреча идет или уже прошла
+                            const isDeleteDisabled = isLoading || hasEventPassed || isEventOngoing;
                             
                             return (
                                 <div
@@ -553,13 +686,26 @@ export const EventsList: React.FC<EventsListProps> = ({
                                         e.currentTarget.style.borderColor = colors.gray200;
                                     }}
                                 >
-                                    {isOrganizer && (
+                                    {/* ✅ Бейджи в правом верхнем углу */}
+                                    {isEventOngoing && (
+                                        <div style={styles.ongoingBadge}>
+                                            <span style={{
+                                                width: '6px',
+                                                height: '6px',
+                                                borderRadius: '50%',
+                                                backgroundColor: colors.white,
+                                                display: 'inline-block',
+                                            }} />
+                                            Идет сейчас
+                                        </div>
+                                    )}
+                                    {isOrganizer && !isEventOngoing && (
                                         <div style={styles.organizerBadge}>
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                                                 <circle cx="12" cy="7" r="4" />
                                             </svg>
-                                            Вы автор
+                                            Вы организатор
                                         </div>
                                     )}
                                     <div style={styles.eventHeader}>
@@ -587,27 +733,33 @@ export const EventsList: React.FC<EventsListProps> = ({
                                     {isOrganizer && (
                                         <div style={styles.deleteButtonContainer}>
                                             <button
-                                                style={isDatePassed ? styles.deleteButtonDisabled : styles.deleteButton}
+                                                style={isDeleteDisabled ? styles.deleteButtonDisabled : styles.deleteButton}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!isDatePassed) {
+                                                    if (!isDeleteDisabled) {
                                                         handleDeleteClick(event.id, event.title);
                                                     }
                                                 }}
-                                                disabled={isLoading || isDatePassed}
+                                                disabled={isDeleteDisabled}
                                                 onMouseOver={(e) => {
-                                                    if (!isLoading && !isDatePassed) {
+                                                    if (!isDeleteDisabled) {
                                                         e.currentTarget.style.backgroundColor = colors.error;
                                                         e.currentTarget.style.color = colors.white;
                                                     }
                                                 }}
                                                 onMouseOut={(e) => {
-                                                    if (!isLoading && !isDatePassed) {
+                                                    if (!isDeleteDisabled) {
                                                         e.currentTarget.style.backgroundColor = 'transparent';
                                                         e.currentTarget.style.color = colors.error;
                                                     }
                                                 }}
-                                                title={isDatePassed ? 'Нельзя удалить встречу на прошедшую дату' : 'Удалить встречу'}
+                                                title={
+                                                    isEventOngoing 
+                                                        ? 'Нельзя удалить встречу, которая сейчас идет' 
+                                                        : hasEventPassed 
+                                                            ? 'Нельзя удалить прошедшую встречу' 
+                                                            : 'Удалить встречу'
+                                                }
                                             >
                                                 <svg
                                                     width="14"
@@ -624,7 +776,12 @@ export const EventsList: React.FC<EventsListProps> = ({
                                                 </svg>
                                                 Удалить
                                             </button>
-                                            {isDatePassed && (
+                                            {isEventOngoing && (
+                                                <span style={styles.deleteHint}>
+                                                    Встреча сейчас идет, удаление недоступно
+                                                </span>
+                                            )}
+                                            {!isEventOngoing && hasEventPassed && (
                                                 <span style={styles.deleteHint}>
                                                     Встреча уже прошла, удаление недоступно
                                                 </span>
@@ -768,6 +925,10 @@ export const EventsList: React.FC<EventsListProps> = ({
                         opacity: 1;
                         transform: translateY(0);
                     }
+                }
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; }
                 }
             `}</style>
         </>

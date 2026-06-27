@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// AddEventModal.tsx
+import React, { useState, useMemo, useEffect } from 'react';
 import { useEvents } from '../context/EventsContext';
 import { useToast } from '../context/ToastContext';
 import { theme } from '../styles/theme';
@@ -18,18 +19,85 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const { addEvent, isLoading } = useEvents();
   const { addToast } = useToast();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
-  
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
-  const [needChat, setNeedChat] = useState(true); // 🆕 По умолчанию чат создаётся
+  const [needChat, setNeedChat] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isFriendsSelectorOpen, setIsFriendsSelectorOpen] = useState(false);
 
+  // ✅ Определяем, является ли выбранная дата сегодняшним днем
+  const isToday = useMemo(() => {
+    if (!selectedDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(selectedDate);
+    selected.setHours(0, 0, 0, 0);
+    return selected.getTime() === today.getTime();
+  }, [selectedDate]);
+
+  // ✅ Минимальное время — строго позже текущего (следующая минута)
+  const getMinTime = useMemo(() => {
+    if (!isToday) return undefined;
+    
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 1); // +1 минута — строго в будущем
+    
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    
+    return `${hours}:${minutes}`;
+  }, [isToday]);
+
+  // ✅ При открытии модалки для сегодняшнего дня подставляем ближайшее будущее время
+  useEffect(() => {
+    if (isOpen && isToday) {
+      const now = new Date();
+      const currentMinutes = now.getMinutes();
+      
+      // Округляем вверх до ближайших 15 минут
+      const roundedMinutes = Math.ceil((currentMinutes + 1) / 15) * 15;
+      let startHours = now.getHours();
+      let startMinutes = roundedMinutes;
+      
+      if (startMinutes >= 60) {
+        startHours += 1;
+        startMinutes = 0;
+      }
+      
+      if (startHours >= 24) {
+        startHours = 23;
+        startMinutes = 45;
+      }
+      
+      const startTimeStr = `${String(startHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`;
+      
+      let endHours = startHours + 1;
+      if (endHours >= 24) endHours = 23;
+      const endTimeStr = `${String(endHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`;
+      
+      setStartTime(startTimeStr);
+      setEndTime(endTimeStr);
+    }
+  }, [isOpen, isToday]);
+
+  // ✅ Обработчик изменения startTime с автокорректировкой endTime
+  const handleStartTimeChange = (newStartTime: string) => {
+    setStartTime(newStartTime);
+    if (newStartTime && endTime && newStartTime >= endTime) {
+      const [hours] = newStartTime.split(':').map(Number);
+      const endHours = (hours + 1) % 24;
+      const [, minutes] = newStartTime.split(':');
+      setEndTime(`${String(endHours).padStart(2, '0')}:${minutes}`);
+    }
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+
     if (!title.trim()) {
       newErrors.title = 'Введите заголовок';
     }
@@ -42,6 +110,17 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
     if (startTime && endTime && startTime >= endTime) {
       newErrors.endTime = 'Время окончания должно быть позже времени начала';
     }
+
+    // ✅ Строгая проверка: время начала должно быть позже текущего
+    if (isToday && startTime && getMinTime && startTime <= getMinTime) {
+      newErrors.startTime = 'Время начала должно быть позже текущего времени';
+    }
+
+    // Проверка времени окончания
+    if (isToday && endTime && getMinTime && endTime < getMinTime) {
+      newErrors.endTime = 'Время окончания должно быть в будущем';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -49,7 +128,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    
+
     try {
       await addEvent({
         title: title.trim(),
@@ -58,15 +137,16 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
         startTime,
         endTime,
         friendIds: selectedFriendIds,
-        needChat, // 🆕 Передаём флаг needChat
+        needChat,
       });
-      
+
       addToast({
         title: 'Встреча создана',
         message: needChat ? 'Встреча и чат успешно созданы' : 'Встреча успешно добавлена в календарь',
         type: 'success',
       });
-      
+
+      // Сброс формы
       setTitle('');
       setDescription('');
       setStartTime('09:00');
@@ -98,6 +178,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   };
 
   const styles = {
+    // ... (стили остаются без изменений)
     overlay: {
       position: 'fixed' as const,
       top: 0,
@@ -280,7 +361,16 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       textAlign: 'center' as const,
       fontWeight: typography.fontWeight.medium,
     } as React.CSSProperties,
-    // 🆕 Стили для чекбокса
+    timeWarning: {
+      fontSize: typography.fontSize.xs,
+      color: colors.primary,
+      marginTop: spacing.xs,
+      textAlign: 'center' as const,
+      fontWeight: typography.fontWeight.medium,
+      backgroundColor: colors.primaryLight + '20',
+      padding: `${spacing.xs} ${spacing.sm}`,
+      borderRadius: borderRadius.md,
+    } as React.CSSProperties,
     checkboxContainer: {
       display: 'flex',
       alignItems: 'center',
@@ -325,7 +415,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             ✕
           </button>
         </div>
-
         <div style={styles.body}>
           <div style={styles.dateDisplay}>
             <p style={styles.dateText}>{formatDate(selectedDate)}</p>
@@ -344,8 +433,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 }}
                 placeholder="Название"
                 disabled={isLoading}
-                onFocus={(e) => e.target.style.borderColor = colors.primary}
-                onBlur={(e) => e.target.style.borderColor = errors.title ? colors.error : colors.gray300}
               />
               {errors.title && <div style={styles.error}>{errors.title}</div>}
             </div>
@@ -358,26 +445,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 style={styles.textarea}
                 placeholder="Описание"
                 disabled={isLoading}
-                onFocus={(e) => e.target.style.borderColor = colors.primary}
-                onBlur={(e) => e.target.style.borderColor = colors.gray300}
               />
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.label}>Время проведения * (GMT+7)</label>
+              <label style={styles.label}>Время проведения</label>
               <div style={styles.timeRow}>
                 <div>
                   <input
                     type="time"
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
+                    onChange={(e) => handleStartTimeChange(e.target.value)}
+                    min={getMinTime}
                     style={{
                       ...styles.timeInput,
                       borderColor: errors.startTime ? colors.error : colors.gray300,
                     }}
                     disabled={isLoading}
-                    onFocus={(e) => e.target.style.borderColor = colors.primary}
-                    onBlur={(e) => e.target.style.borderColor = errors.startTime ? colors.error : colors.gray300}
                   />
                   {errors.startTime && <div style={styles.error}>{errors.startTime}</div>}
                   <div style={styles.timeSubLabel}>Начало</div>
@@ -387,18 +471,23 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                     type="time"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
+                    min={startTime || getMinTime}
                     style={{
                       ...styles.timeInput,
                       borderColor: errors.endTime ? colors.error : colors.gray300,
                     }}
                     disabled={isLoading}
-                    onFocus={(e) => e.target.style.borderColor = colors.primary}
-                    onBlur={(e) => e.target.style.borderColor = errors.endTime ? colors.error : colors.gray300}
                   />
                   {errors.endTime && <div style={styles.error}>{errors.endTime}</div>}
                   <div style={styles.timeSubLabel}>Окончание</div>
                 </div>
               </div>
+
+              {isToday && (
+                <div style={styles.timeWarning}>
+                  Время начала должно быть строго позже текущего момента
+                </div>
+              )}
             </div>
 
             <div style={styles.formGroup}>
@@ -408,18 +497,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 style={styles.friendsButton}
                 onClick={() => setIsFriendsSelectorOpen(true)}
                 disabled={isLoading}
-                onMouseOver={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.backgroundColor = colors.gray50;
-                    e.currentTarget.style.borderColor = colors.primary;
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.backgroundColor = colors.white;
-                    e.currentTarget.style.borderColor = colors.gray300;
-                  }
-                }}
               >
                 Выбрать друзей
                 {selectedFriendIds.length > 0 && (
@@ -435,24 +512,11 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
               )}
             </div>
 
-            {/* 🆕 Чекбокс для создания чата */}
             <div style={styles.formGroup}>
               <label style={styles.label}>Настройки чата</label>
               <div
                 style={styles.checkboxContainer}
                 onClick={() => !isLoading && setNeedChat(!needChat)}
-                onMouseOver={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.backgroundColor = colors.primary + '10';
-                    e.currentTarget.style.borderColor = colors.primary;
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.backgroundColor = colors.gray50;
-                    e.currentTarget.style.borderColor = colors.gray200;
-                  }
-                }}
               >
                 <input
                   type="checkbox"
@@ -467,8 +531,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 </span>
               </div>
               <div style={styles.checkboxHint}>
-                {needChat 
-                  ? 'После создания встречи будет создан чат для всех участников' 
+                {needChat
+                  ? 'После создания встречи будет создан чат для всех участников'
                   : 'Чат не будет создан. Участники смогут общаться другими способами'}
               </div>
             </div>
@@ -479,12 +543,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 style={styles.button('secondary')}
                 onClick={onClose}
                 disabled={isLoading}
-                onMouseOver={(e) => {
-                  if (!isLoading) e.currentTarget.style.backgroundColor = colors.gray300;
-                }}
-                onMouseOut={(e) => {
-                  if (!isLoading) e.currentTarget.style.backgroundColor = colors.gray200;
-                }}
               >
                 Отмена
               </button>
@@ -492,12 +550,6 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
                 type="submit"
                 style={styles.button('primary')}
                 disabled={isLoading}
-                onMouseOver={(e) => {
-                  if (!isLoading) e.currentTarget.style.backgroundColor = colors.primaryDark;
-                }}
-                onMouseOut={(e) => {
-                  if (!isLoading) e.currentTarget.style.backgroundColor = colors.primary;
-                }}
               >
                 {isLoading ? 'Сохранение...' : 'Добавить'}
               </button>
@@ -508,12 +560,12 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
 
       {isFriendsSelectorOpen && (
         <div style={styles.overlay} onClick={() => setIsFriendsSelectorOpen(false)}>
-          <div 
+          <div
             style={{
               ...styles.modal,
               maxWidth: '400px',
               maxHeight: '500px',
-            }} 
+            }}
             onClick={e => e.stopPropagation()}
           >
             <FriendsSelector

@@ -5,6 +5,12 @@ import { theme } from '../styles/theme';
 import type { DetailedEventDto } from '../api/events/EventsContracts';
 import ChatWindow from './ChatWindow';
 import { FriendsSelectorForEvent } from './FriendsSelectorForEvent';
+import { LiveKitRoom, VideoConference } from '@livekit/components-react';
+import '@livekit/components-styles';
+import { config } from '../config/env';
+
+const API_BASE_URL = config.apiUrl;
+const LIVEKIT_SERVER_URL = config.liveServerUrl;
 
 interface EventDetailsModalProps {
   isOpen: boolean;
@@ -20,12 +26,17 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
   const { getEventDetails, removeMember, addMemberToEvent } = useEvents();
   const { user } = useAuth();
-  
+
   const [eventDetails, setEventDetails] = useState<DetailedEventDto | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   
+  const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
+  const [videoToken, setVideoToken] = useState<string | null>(null);
+  const [isTokenLoading, setIsTokenLoading] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
   const [confirmDeleteModal, setConfirmDeleteModal] = useState<{
     isOpen: boolean;
     participantId: string | null;
@@ -41,7 +52,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     if (isOpen && eventId) {
       setIsLoadingDetails(true);
       setEventDetails(null);
-      
       getEventDetails(eventId)
         .then(data => setEventDetails(data))
         .catch(err => console.error('Failed to load event details:', err))
@@ -52,12 +62,118 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setIsChatOpen(false);
+      setIsVideoCallOpen(false);
+      setVideoToken(null);
+      setVideoError(null);
       setConfirmDeleteModal({ isOpen: false, participantId: null, participantUsername: null });
       setAddMemberModal({ isOpen: false, isLoading: false });
     }
   }, [isOpen]);
 
-  // ✅ Проверяем, прошла ли встреча (сравниваем endAt с текущим моментом)
+  // ✅ MutationObserver для перевода LiveKit, скрытия кнопки выхода и встроенного чата
+  useEffect(() => {
+    if (!isVideoCallOpen) return;
+
+    const translations: Record<string, string> = {
+      'Microphone': 'Микрофон',
+      'Camera': 'Камера',
+      'Share screen': 'Поделиться экраном',
+      'Leave': 'Покинуть',
+      'Chat': 'Чат',
+      'Participants': 'Участники',
+      'Unmute microphone': 'Включить микрофон',
+      'Mute microphone': 'Выключить микрофон',
+      'Start video': 'Включить камеру',
+      'Stop video': 'Выключить камеру',
+      'Start screen share': 'Начать демонстрацию экрана',
+      'Stop screen share': 'Остановить демонстрацию экрана',
+      'Send': 'Отправить',
+      'Type a message...': 'Введите сообщение...',
+      'Type a message': 'Введите сообщение',
+      'Chat is empty': 'Чат пуст',
+      'No participants': 'Нет участников',
+      'You': 'Вы',
+      'Connecting...': 'Подключение...',
+      'Reconnecting...': 'Переподключение...',
+      'Disconnected': 'Отключено',
+      'Screen share': 'Демонстрация экрана',
+      'Settings': 'Настройки',
+      'Devices': 'Устройства',
+      'Muted': 'Выключен',
+      'Speaking': 'Говорит',
+      'Unmute': 'Включить',
+      'Mute': 'Выключить',
+    };
+
+    const processNode = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (!el.closest('[data-lk-theme]')) return;
+        
+        ['aria-label', 'title', 'placeholder'].forEach(attr => {
+          const val = el.getAttribute(attr);
+          if (val && translations[val]) {
+            el.setAttribute(attr, translations[val]);
+          }
+        });
+
+        const ariaLabel = el.getAttribute('aria-label');
+
+        // ✅ Скрываем кнопку выхода LiveKit
+        if (ariaLabel === 'Leave' || ariaLabel === 'Покинуть') {
+          el.style.display = 'none';
+        }
+
+        // ✅ Скрываем кнопку встроенного чата LiveKit
+        if (ariaLabel === 'Chat' || ariaLabel === 'Чат') {
+          // Проверяем, что это именно элемент LiveKit, а не наш кастомный чат
+          if (el.closest('.lk-control-bar') || el.closest('.lk-button') || el.closest('[class*="lk-"]')) {
+            el.style.display = 'none';
+          }
+        }
+      } 
+      else if (node.nodeType === Node.TEXT_NODE) {
+        if (!node.parentElement?.closest('[data-lk-theme]')) return;
+        const text = node.textContent?.trim();
+        if (text && translations[text]) {
+          node.textContent = translations[text];
+        }
+      }
+    };
+
+    const processTree = (root: Node) => {
+      processNode(root);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL, null);
+      let currentNode: Node | null = walker.nextNode();
+      while (currentNode) {
+        processNode(currentNode);
+        currentNode = walker.nextNode();
+      }
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => processTree(node));
+        if (mutation.type === 'attributes' && mutation.target) {
+          processNode(mutation.target);
+        }
+      });
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+    });
+
+    processTree(document.body);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isVideoCallOpen]);
+
   const isEventPassed = useMemo(() => {
     if (!eventDetails?.endAt) return false;
     return new Date(eventDetails.endAt).getTime() < Date.now();
@@ -96,10 +212,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
       year: 'numeric',
       weekday: 'long',
     });
-    
+
     const startTime = startDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     const endTime = endDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    
+
     if (sameDay) {
       return `${dateStr}, ${startTime} - ${endTime}`;
     } else {
@@ -114,7 +230,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
   const getParticipantsList = () => {
     if (!eventDetails) return [];
-    
     const organizer = {
       id: eventDetails.initiator.userId,
       username: eventDetails.initiator.username,
@@ -122,7 +237,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
       isOrganizer: true,
       isCurrentUser: isCurrentUser(eventDetails.initiator.username),
     };
-    
+
     const otherMembers = (eventDetails.members || [])
       .filter(m => m.username !== eventDetails.initiator.username)
       .map(m => ({ 
@@ -131,7 +246,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         isOrganizer: false,
         isCurrentUser: isCurrentUser(m.username),
       }));
-    
+
     return [organizer, ...otherMembers];
   };
 
@@ -139,15 +254,62 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     eventDetails.initiator.username === user?.name ||
     eventDetails.members?.some(m => m.username === user?.name)
   );
-
+  
   const isInitiator = eventDetails && eventDetails.initiator.username === user?.name;
-
   const hasChat = eventDetails?.chatId !== null && eventDetails?.chatId !== undefined;
+
+  const fetchVideoToken = async () => {
+    if (!eventId || !user?.name || !user?.accessToken) return;
+    setIsTokenLoading(true);
+    setVideoError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/v1/videos/token?roomName=${encodeURIComponent(eventId)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${user.accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Ошибка сервера: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.token) {
+        throw new Error('Токен не получен от сервера');
+      }
+
+      setVideoToken(data.token);
+      setIsVideoCallOpen(true);
+    } catch (err) {
+      console.error('Failed to fetch video token:', err);
+      setVideoError(err instanceof Error ? err.message : 'Не удалось подключиться к звонку');
+    } finally {
+      setIsTokenLoading(false);
+    }
+  };
+
+  const handleOpenVideoCall = () => {
+    if (videoToken) {
+      setIsVideoCallOpen(true);
+    } else {
+      fetchVideoToken();
+    }
+  };
+
+  const handleCloseVideoCall = () => {
+    setIsVideoCallOpen(false);
+    setIsChatOpen(false); // ✅ Закрываем чат при выходе из звонка
+    setVideoToken(null);
+  };
 
   const handleConfirmRemoveMember = async () => {
     const { participantId } = confirmDeleteModal;
     if (!participantId || !eventId) return;
-    
+
     setRemovingMemberId(participantId);
     try {
       await removeMember(eventId, participantId);
@@ -167,7 +329,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
   const handleAddMember = async (friendId: string) => {
     if (!eventId) return;
-    
     setAddMemberModal(prev => ({ ...prev, isLoading: true }));
     try {
       await addMemberToEvent(eventId, friendId);
@@ -184,13 +345,278 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     setAddMemberModal({ isOpen: false, isLoading: false });
   };
 
+  if (isVideoCallOpen) {
+    if (!videoToken) {
+      return (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3000,
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div style={{
+            backgroundColor: colors.white,
+            padding: `${spacing.lg} ${spacing.xl}`,
+            borderRadius: borderRadius.xl,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: spacing.md,
+            boxShadow: shadows.xl,
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+            <span style={{ fontSize: typography.fontSize.base, color: colors.gray700, fontWeight: typography.fontWeight.medium }}>
+              Подключение к звонку...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        data-lk-theme="default"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: '#111827',
+          zIndex: 3000,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Хедер */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: `${spacing.md} ${spacing.lg}`,
+          backgroundColor: '#1f2937',
+          borderBottom: '1px solid #374151',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              backgroundColor: colors.error,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ 
+                fontSize: typography.fontSize.base, 
+                fontWeight: typography.fontWeight.bold,
+                color: colors.white,
+              }}>
+                {eventDetails?.title || 'Видеозвонок'}
+              </div>
+              <div style={{
+                fontSize: typography.fontSize.xs,
+                color: '#9ca3af',
+                marginTop: '2px',
+              }}>
+                Комната: {eventId}
+              </div>
+            </div>
+          </div>
+
+          {/* ✅ Группа кнопок: Чат + Отключиться */}
+          <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'center' }}>
+            {/* ✅ Кнопка открытия/закрытия кастомного чата */}
+            {hasChat && user?.accessToken && (
+              <button
+                onClick={() => setIsChatOpen(prev => !prev)}
+                title={isChatOpen ? 'Закрыть чат' : 'Открыть чат'}
+                style={{
+                  background: isChatOpen
+                    ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+                    : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  color: colors.white,
+                  border: 'none',
+                  borderRadius: borderRadius.lg,
+                  padding: `${spacing.sm} ${spacing.lg}`,
+                  fontSize: typography.fontSize.sm,
+                  fontWeight: typography.fontWeight.bold,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+                  transition: `all ${transitions.fast}`,
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.6)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.4)';
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                {isChatOpen ? 'Закрыть чат' : 'Чат'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* LiveKit конференция */}
+        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          <style>{`
+            /* Кастомизация LiveKit */
+            [data-lk-theme="default"] {
+              --lk-color-background: #111827;
+            }
+            
+            /* ✅ Скрываем стандартную кнопку выхода LiveKit (максимально надёжно) */
+            [data-lk-theme] [aria-label="Leave"],
+            [data-lk-theme] [aria-label="Покинуть"],
+            [data-lk-theme] [title="Leave"],
+            [data-lk-theme] [title="Покинуть"],
+            [data-lk-theme] .lk-leave-button {
+              display: none !important;
+              visibility: hidden !important;
+              width: 0 !important;
+              height: 0 !important;
+              overflow: hidden !important;
+              position: absolute !important;
+              pointer-events: none !important;
+            }
+
+            /* ✅ Скрываем встроенный чат LiveKit (кнопку-переключатель и саму панель) */
+            [data-lk-theme] .lk-chat-toggle,
+            [data-lk-theme] .lk-chat,
+            [data-lk-theme] .lk-chat-trigger {
+              display: none !important;
+              visibility: hidden !important;
+              width: 0 !important;
+              height: 0 !important;
+              overflow: hidden !important;
+              position: absolute !important;
+              pointer-events: none !important;
+            }
+
+            .lk-button {
+              background-color: #374151 !important;
+              border: 2px solid #4b5563 !important;
+              border-radius: 12px !important;
+              transition: all 0.2s ease !important;
+            }
+            
+            .lk-button:hover {
+              background-color: #4b5563 !important;
+              border-color: #6b7280 !important;
+              transform: scale(1.05) !important;
+            }
+            
+            .lk-button[data-lk-muted='true'] {
+              background-color: #ef4444 !important;
+              border-color: #dc2626 !important;
+            }
+            
+            /* ✅ ИСПРАВЛЕНИЕ: Повышаем специфичность, чтобы LiveKit не перезаписал стили при перерасчете */
+            [data-lk-theme="default"] .lk-control-bar {
+              background-color: rgba(31, 41, 55, 0.95) !important;
+              backdrop-filter: blur(10px) !important;
+              border: 1px solid #374151 !important;
+              padding: 16px !important;
+              border-radius: 16px !important;
+              
+              /* Точный отступ: 16px снизу, 16px по бокам, 0 сверху */
+              margin: 0 16px 16px 16px !important; 
+              width: calc(100% - 32px) !important;
+              box-sizing: border-box !important;
+              
+              /* Страховка, если LiveKit использует абсолютное позиционирование */
+              bottom: 16px !important; 
+            }
+
+            [data-lk-theme="default"] .lk-footer {
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            
+            .lk-participant-tile {
+              border-radius: 16px !important;
+              overflow: hidden !important;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+            }
+          `}</style>
+          
+          <LiveKitRoom
+            serverUrl={LIVEKIT_SERVER_URL}
+            token={videoToken}
+            connect={true}
+            audio={true}
+            video={true}
+            style={{ height: '100%', width: '100%' }}
+            onDisconnected={handleCloseVideoCall}
+          >
+            <VideoConference />
+          </LiveKitRoom>
+
+          {/* ✅ Оверлей кастомного чата прямо во время видеозвонка */}
+          {isChatOpen && hasChat && getChatId() && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                bottom: '100px',
+                width: '380px',
+                maxWidth: 'calc(100% - 32px)',
+                zIndex: 10,
+                borderRadius: borderRadius.xl,
+                overflow: 'hidden',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                animation: 'slideInRight 0.25s ease',
+              }}
+            >
+              <ChatWindow
+                chatId={getChatId()!}
+                onClose={() => setIsChatOpen(false)}
+                currentUsername={user?.name || ''}
+                readOnly={isEventPassed}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Рендер чата (отдельное окно из модалки)
   if (isChatOpen) {
     const chatId = getChatId();
     if (!chatId) {
       setIsChatOpen(false);
       return null;
     }
-    
+
     return (
       <div
         style={{
@@ -220,7 +646,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             chatId={chatId}
             onClose={() => setIsChatOpen(false)}
             currentUsername={user?.name || ''}
-            readOnly={isEventPassed} // ✅ Передаём флаг "только чтение"
+            readOnly={isEventPassed}
           />
         </div>
       </div>
@@ -282,7 +708,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   }}>
                     {eventDetails?.title || 'Загрузка...'}
                   </h3>
-                  {/* ✅ Бейдж "Встреча состоялась" */}
                   {isEventPassed && (
                     <span style={{
                       padding: `${spacing.xs} ${spacing.sm}`,
@@ -299,24 +724,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                       Состоялась
-                    </span>
-                  )}
-                  {hasChat && !isEventPassed && (
-                    <span style={{
-                      padding: `${spacing.xs} ${spacing.sm}`,
-                      backgroundColor: colors.primary + '20',
-                      color: colors.primary,
-                      borderRadius: borderRadius.full,
-                      fontSize: typography.fontSize.xs,
-                      fontWeight: typography.fontWeight.semibold,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: spacing.xs,
-                    }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                      Есть чат
                     </span>
                   )}
                 </div>
@@ -377,7 +784,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   </svg>
                   <div>
                     <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, color: colors.gray900 }}>
-                      Дата и время проведения (GMT+7)
+                      Дата и время проведения
                     </div>
                     <div style={{ fontSize: typography.fontSize.sm, color: colors.gray700 }}>
                       {formatDateRange(eventDetails.startAt, eventDetails.endAt)}
@@ -418,6 +825,120 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             </p>
           </div>
 
+          {/* VIDEO CALL SECTION */}
+          {isParticipant && (
+            <div style={{
+              marginBottom: spacing.lg,
+              padding: spacing.md,
+              backgroundColor: isEventPassed 
+                ? colors.gray100 
+                : colors.successLight,
+              borderRadius: borderRadius.md,
+              border: `1px solid ${isEventPassed 
+                ? colors.gray300 
+                : colors.success}`,
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacing.sm,
+                marginBottom: spacing.sm,
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={isEventPassed ? colors.gray500 : colors.success} strokeWidth="2">
+                  <polygon points="23 7 16 12 23 17 23 7" />
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+                <span style={{
+                  fontSize: typography.fontSize.sm,
+                  fontWeight: typography.fontWeight.semibold,
+                  color: isEventPassed ? colors.gray600 : colors.successDark,
+                }}>
+                  {isEventPassed 
+                    ? 'Видеозвонок (недоступен)' 
+                    : 'Видеозвонок'}
+                </span>
+              </div>
+
+              {isEventPassed && (
+                <p style={{
+                  margin: `0 0 ${spacing.sm} 0`,
+                  fontSize: typography.fontSize.xs,
+                  color: colors.gray600,
+                  fontStyle: 'italic',
+                  lineHeight: 1.4,
+                }}>
+                  Встреча уже состоялась. Видеозвонок недоступен.
+                </p>
+              )}
+
+              {videoError && (
+                <div style={{
+                  marginBottom: spacing.sm,
+                  padding: spacing.sm,
+                  backgroundColor: colors.errorLight,
+                  color: colors.errorDark,
+                  borderRadius: borderRadius.sm,
+                  fontSize: typography.fontSize.xs,
+                }}>
+                  {videoError}
+                </div>
+              )}
+
+              <button
+                onClick={handleOpenVideoCall}
+                disabled={isEventPassed || isTokenLoading || !user?.accessToken}
+                style={{
+                  width: '100%',
+                  padding: `${spacing.sm} ${spacing.md}`,
+                  backgroundColor: isEventPassed
+                    ? colors.gray400
+                    : colors.success,
+                  color: colors.white,
+                  border: 'none',
+                  borderRadius: borderRadius.md,
+                  fontSize: typography.fontSize.sm,
+                  fontWeight: typography.fontWeight.semibold,
+                  cursor: isEventPassed || isTokenLoading || !user?.accessToken
+                    ? 'not-allowed'
+                    : 'pointer',
+                  opacity: isEventPassed || !user?.accessToken ? 0.6 : 1,
+                  transition: `all ${transitions.fast}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: spacing.sm,
+                }}
+                onMouseOver={(e) => {
+                  if (!isEventPassed && !isTokenLoading && user?.accessToken) {
+                    e.currentTarget.style.backgroundColor = colors.successDark || '#1e7e34';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!isEventPassed && !isTokenLoading && user?.accessToken) {
+                    e.currentTarget.style.backgroundColor = colors.success;
+                  }
+                }}
+              >
+                {isTokenLoading ? (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    Подключение...
+                  </>
+                ) : (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="23 7 16 12 23 17 23 7" />
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                    {isEventPassed ? 'Недоступно' : 'Подключиться'}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* PARTICIPANTS */}
           <div style={{ marginBottom: spacing.lg }}>
             <h4 style={{
@@ -429,7 +950,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               Участники
             </h4>
 
-          
             <div style={{ display: 'flex', flexDirection: 'column' as const, gap: spacing.sm }}>
               {isLoadingDetails ? (
                 [1, 2, 3].map(i => (
@@ -437,11 +957,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 ))
               ) : (
                 getParticipantsList().map((participant, index) => {
-                  // ✅ Кнопка "Исключить" показывается только если встреча не прошла
                   const canRemoveMember = !participant.isOrganizer 
-                    && !participant.isCurrentUser 
-                    && isInitiator 
-                    && !isEventPassed;
+                     && !participant.isCurrentUser 
+                     && isInitiator 
+                     && !isEventPassed;
 
                   return (
                     <div
@@ -485,7 +1004,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                           <span style={{
                             padding: `${spacing.xs} ${spacing.sm}`,
                             backgroundColor: colors.primary,
-                            color: colors.white,
+                            color: colors.white, 
                             borderRadius: borderRadius.full,
                             fontSize: typography.fontSize.xs,
                             fontWeight: typography.fontWeight.semibold,
@@ -575,7 +1094,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 })
               )}
               
-              {/* ✅ Кнопка добавления участника — видна только организатору и только если встреча не прошла */}
               {isInitiator && !isEventPassed && (
                 <button
                   onClick={(e) => {
@@ -652,7 +1170,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 </span>
               </div>
 
-              {/* ✅ Подсказка для прошедшей встречи */}
               {isEventPassed && (
                 <p style={{
                   margin: `0 0 ${spacing.sm} 0`,
@@ -701,7 +1218,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                {isEventPassed ? 'Читать' : 'Открыть чат'}
+                {isEventPassed ? 'Читать' : 'Открыть'}
               </button>
             </div>
           )}
@@ -958,10 +1475,21 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             transform: translateY(0);
           }
         }
+
+        @keyframes slideInRight {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
         
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          50% { opacity: 0.5; } 
         }
         
         @keyframes spin {

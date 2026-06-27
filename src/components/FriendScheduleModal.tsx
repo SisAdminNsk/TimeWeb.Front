@@ -341,7 +341,7 @@ export const FriendScheduleModal: React.FC<FriendScheduleModalProps> = ({
       <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <div>
-            <h3 style={styles.modalTitle}>Расписание (GMT+7)</h3>
+            <h3 style={styles.modalTitle}>Расписание</h3>
             <div style={styles.friendInfo}>
               <div style={styles.friendAvatar}>{getInitials(friendName)}</div>
               <p style={styles.friendName}>{friendName}</p>
