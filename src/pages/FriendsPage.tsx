@@ -7,6 +7,7 @@ import ChatWindow from '../components/ChatWindow';
 import { usePersonalChatOpener } from '../hooks/UsePersonalChatOpener';
 import { theme } from '../styles/theme';
 import { FriendScheduleModal } from '../components/FriendScheduleModal';
+import { chatsClient } from '../api/chats/ChatsClient'; // 🆕 Импорт клиента чатов
 
 type SectionType = 'friends' | 'incoming' | 'outgoing' | 'add';
 
@@ -25,40 +26,21 @@ interface ActivePersonalChat {
 
 export const FriendsPage = () => {
   const {
-    friends,
-    incomingInvites,
-    outgoingInvites,
-    friendsTotalCount,
-    incomingTotalCount,
-    outgoingTotalCount,
-    friendsPage,
-    incomingPage,
-    outgoingPage,
-    pageSize,
-    isLoading,
-    error,
-    notification,
-    friendsLastSeen,
-    sendFriendRequest,
-    acceptInvite,
-    declineInvite,
-    declineOutgoingInvite,
-    removeFriend,
-    refreshFriends,
-    refreshIncomingInvites,
-    refreshOutgoingInvites,
-    refreshInvites,
-    clearError,
-    clearNotification,
+    friends, incomingInvites, outgoingInvites,
+    friendsTotalCount, incomingTotalCount, outgoingTotalCount,
+    friendsPage, incomingPage, outgoingPage, pageSize,
+    isLoading, error, notification, friendsLastSeen,
+    sendFriendRequest, acceptInvite, declineInvite, declineOutgoingInvite, removeFriend,
+    refreshFriends, refreshIncomingInvites, refreshOutgoingInvites, refreshInvites,
+    clearError, clearNotification,
   } = useFriends();
 
   const { user } = useAuth();
   const { addToast } = useToast();
   const { colors, typography, spacing, borderRadius, shadows, transitions } = theme;
-
-  const { 
-    openPersonalChat, 
-    isLoading: isChatLoading, 
+  const {
+    openPersonalChat,
+    isLoading: isChatLoading,
     error: chatError,
     clearError: clearChatError,
   } = usePersonalChatOpener();
@@ -68,12 +50,14 @@ export const FriendsPage = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activePersonalChat, setActivePersonalChat] = useState<ActivePersonalChat | null>(null);
-  
   const [scheduleModal, setScheduleModal] = useState<{
     isOpen: boolean;
     friendId: string | null;
     friendName: string | null;
   }>({ isOpen: false, friendId: null, friendName: null });
+
+  // 🆕 Состояние для статусов непрочитанных сообщений по friendId
+  const [unreadStatuses, setUnreadStatuses] = useState<Record<string, boolean>>({});
 
   const isFirstRender = useRef(true);
 
@@ -89,32 +73,104 @@ export const FriendsPage = () => {
   }, []);
 
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
-    isOpen: false,
-    itemId: null,
-    itemName: null,
-    actionType: null,
+    isOpen: false, itemId: null, itemName: null, actionType: null,
   });
+
+  // 🆕 Функция проверки обновлений для списка друзей
+  const loadFriendsUnreadStatuses = async (friendsList: any[]) => {
+    if (!user?.accessToken || friendsList.length === 0) return;
+    try {
+      const chatIdPromises = friendsList.map(async (friend) => {
+        try {
+          const personalChat = await chatsClient.getPersonalChat(user.accessToken!, friend.friendId);
+          return { friendId: friend.friendId, chatId: personalChat.chatId };
+        } catch (err) {
+          return { friendId: friend.friendId, chatId: null };
+        }
+      });
+
+      const chatIdResults = await Promise.allSettled(chatIdPromises);
+      const friendChatMap: Record<string, string> = {};
+      chatIdResults.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value.chatId) {
+          friendChatMap[result.value.friendId] = result.value.chatId;
+        }
+      });
+
+      const updatePromises = Object.entries(friendChatMap).map(async ([friendId, chatId]) => {
+        try {
+          const response = await chatsClient.checkUpdates(user.accessToken!, chatId);
+          const hasUpdates = response.updates?.[0]?.hasUpdates ?? false;
+          return { friendId, hasUpdates };
+        } catch (err) {
+          return { friendId, hasUpdates: false };
+        }
+      });
+
+      const updateResults = await Promise.allSettled(updatePromises);
+      const newStatuses: Record<string, boolean> = {};
+      updateResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          newStatuses[result.value.friendId] = result.value.hasUpdates;
+        }
+      });
+      setUnreadStatuses((prev) => ({ ...prev, ...newStatuses }));
+    } catch (err) {
+      console.error('Failed to load unread statuses:', err);
+    }
+  };
+
+  // 🆕 Функция пометки чата с другом как прочитанного при открытии
+  const markFriendChatAsViewed = async (friendId: string) => {
+    if (!user?.accessToken) return;
+    try {
+      const personalChat = await chatsClient.getPersonalChat(user.accessToken, friendId);
+      if (personalChat?.chatId) {
+        await chatsClient.markAsViewed(user.accessToken, personalChat.chatId);
+        setUnreadStatuses((prev) => ({ ...prev, [friendId]: false }));
+      }
+    } catch (err) {
+      console.error('Failed to mark chat as viewed:', err);
+    }
+  };
+
+  // 🆕 Функция закрытия чата с отправкой markAsViewed (всегда, без условий)
+  const handleClosePersonalChat = async () => {
+    if (activePersonalChat && user?.accessToken) {
+      try {
+        await chatsClient.markAsViewed(user.accessToken, activePersonalChat.chatId);
+        setUnreadStatuses(prev => ({ ...prev, [activePersonalChat.participantId]: false }));
+      } catch (err) {
+        console.error('Failed to mark chat as viewed on close:', err);
+      }
+      setActivePersonalChat(null);
+    }
+  };
 
   useEffect(() => {
     refreshFriends(1);
     refreshInvites();
   }, []);
 
-  // 🆕 Обновление данных и счетчиков для ВСЕХ разделов при переключении вкладок
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    
-    // Запрашиваем свежие данные для всех списков, чтобы счетчики в сайдбаре всегда были актуальны
-    // При этом передаем текущие страницы, чтобы не сбрасывать пагинацию у пользователя
     refreshFriends(friendsPage);
     refreshIncomingInvites(incomingPage);
     refreshOutgoingInvites(outgoingPage);
-    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection]);
+
+  // 🆕 После загрузки друзей - проверяем обновления чатов
+  useEffect(() => {
+    const friendsList = Array.isArray(friends) ? friends : [];
+    if (friendsList.length > 0 && !isLoading) {
+      loadFriendsUnreadStatuses(friendsList);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [friends, isLoading]);
 
   useEffect(() => {
     if (isMobile) setIsSidebarOpen(false);
@@ -123,8 +179,7 @@ export const FriendsPage = () => {
   useEffect(() => {
     if (notification) {
       addToast({
-        title: notification.type === 'success' ? 'Успешно' :
-               notification.type === 'error' ? 'Ошибка' : 'Информация',
+        title: notification.type === 'success' ? 'Успешно' : notification.type === 'error' ? 'Ошибка' : 'Информация',
         message: notification.message,
         type: notification.type,
       });
@@ -175,7 +230,7 @@ export const FriendsPage = () => {
   };
 
   const handleAcceptInvite = async (inviteId: string) => {
-    try { await acceptInvite(inviteId); } 
+    try { await acceptInvite(inviteId); }
     catch (err) { console.error('Failed to accept invite:', err); }
   };
 
@@ -257,6 +312,7 @@ export const FriendsPage = () => {
   const friendsList = Array.isArray(friends) ? friends : [];
   const incomingList = Array.isArray(incomingInvites) ? incomingInvites : [];
   const outgoingList = Array.isArray(outgoingInvites) ? outgoingInvites : [];
+
   const containerStyle: React.CSSProperties = { minHeight: '100%', padding: isMobile ? spacing.md : 0 };
   const pageHeaderStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? spacing.lg : spacing.xl, paddingBottom: isMobile ? spacing.md : spacing.lg, borderBottom: `1px solid ${colors.gray200}`, flexWrap: 'wrap', gap: spacing.sm };
   const pageTitleStyle: React.CSSProperties = { margin: 0, fontSize: isMobile ? typography.fontSize.xl : typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, color: colors.gray900 };
@@ -277,59 +333,33 @@ export const FriendsPage = () => {
   const sectionDescriptionStyle: React.CSSProperties = { margin: `${spacing.xs} 0 0 0`, fontSize: typography.fontSize.sm, color: colors.gray500 };
   const sectionBodyStyle: React.CSSProperties = { padding: isMobile ? spacing.md : spacing.xl };
   const buttonSecondaryStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, fontSize: typography.fontSize.sm, backgroundColor: 'transparent', color: colors.gray700, border: `1px solid ${colors.gray300}`, borderRadius: borderRadius.md, cursor: 'pointer', fontWeight: typography.fontWeight.medium, transition: `all ${transitions.normal}`, display: 'flex', alignItems: 'center', gap: spacing.xs, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
-  
-  // 🎨 Стильные кнопки действий для друзей
+
   const getFriendActionButtonStyle = (variant: 'schedule' | 'chat' | 'remove', disabled: boolean = false): React.CSSProperties => {
     const isRemove = variant === 'remove';
-    const baseColor = variant === 'schedule' ? colors.info : 
-                      variant === 'chat' ? colors.primary : 
-                      colors.error;
-    
+    const baseColor = variant === 'schedule' ? colors.info : variant === 'chat' ? colors.primary : colors.error;
     return {
-      padding: `${spacing.xs} ${spacing.sm}`,
-      fontSize: typography.fontSize.xs,
-      backgroundColor: disabled ? colors.gray200 : 
-        isRemove ? colors.error : 'transparent',
-      color: disabled ? colors.gray400 : 
-        isRemove ? colors.white : baseColor,
-      border: disabled ? '1px solid transparent' : 
-        isRemove ? 'none' : `1.5px solid ${baseColor}`,
-      borderRadius: borderRadius.md,
-      cursor: disabled ? 'not-allowed' : 'pointer',
-      fontWeight: typography.fontWeight.medium,
-      transition: `all ${transitions.fast}`,
-      opacity: disabled ? 0.6 : 1,
-      outline: 'none',
-      whiteSpace: 'nowrap' as const,
-      display: 'flex',
-      alignItems: 'center',
-      gap: spacing.xs,
-      minHeight: '32px',
+      padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.xs,
+      backgroundColor: disabled ? colors.gray200 : isRemove ? colors.error : 'transparent',
+      color: disabled ? colors.gray400 : isRemove ? colors.white : baseColor,
+      border: disabled ? '1px solid transparent' : isRemove ? 'none' : `1.5px solid ${baseColor}`,
+      borderRadius: borderRadius.md, cursor: disabled ? 'not-allowed' : 'pointer',
+      fontWeight: typography.fontWeight.medium, transition: `all ${transitions.fast}`,
+      opacity: disabled ? 0.6 : 1, outline: 'none', whiteSpace: 'nowrap' as const,
+      display: 'flex', alignItems: 'center', gap: spacing.xs, minHeight: '32px',
     };
   };
-  
-  const getActionButtonStyle = (variant: 'success' | 'danger' | 'secondary' | 'chat', disabled: boolean = false): React.CSSProperties => ({ 
-    padding: `${spacing.xs} ${spacing.sm}`, 
-    fontSize: typography.fontSize.xs, 
-    backgroundColor: disabled ? colors.gray200 : 
-      variant === 'success' ? colors.success : 
-      variant === 'danger' ? colors.error : 
-      variant === 'chat' ? colors.primary : colors.gray100, 
-    color: disabled ? colors.gray400 : 
-      variant === 'secondary' ? colors.gray600 : colors.white, 
-    border: variant === 'secondary' ? `1px solid ${colors.gray300}` : 'none', 
-    borderRadius: borderRadius.md, 
-    cursor: disabled ? 'not-allowed' : 'pointer', 
-    fontWeight: typography.fontWeight.medium, 
-    transition: `all ${transitions.fast}`, 
-    opacity: disabled ? 0.6 : 1, 
-    outline: 'none', 
-    whiteSpace: 'nowrap' as const, 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: spacing.xs 
+
+  const getActionButtonStyle = (variant: 'success' | 'danger' | 'secondary' | 'chat', disabled: boolean = false): React.CSSProperties => ({
+    padding: `${spacing.xs} ${spacing.sm}`, fontSize: typography.fontSize.xs,
+    backgroundColor: disabled ? colors.gray200 : variant === 'success' ? colors.success : variant === 'danger' ? colors.error : variant === 'chat' ? colors.primary : colors.gray100,
+    color: disabled ? colors.gray400 : variant === 'secondary' ? colors.gray600 : colors.white,
+    border: variant === 'secondary' ? `1px solid ${colors.gray300}` : 'none',
+    borderRadius: borderRadius.md, cursor: disabled ? 'not-allowed' : 'pointer',
+    fontWeight: typography.fontWeight.medium, transition: `all ${transitions.fast}`,
+    opacity: disabled ? 0.6 : 1, outline: 'none', whiteSpace: 'nowrap' as const,
+    display: 'flex', alignItems: 'center', gap: spacing.xs
   });
-  
+
   const listStyle: React.CSSProperties = { backgroundColor: colors.white, borderRadius: borderRadius.lg, boxShadow: shadows.sm, border: `1px solid ${colors.gray200}`, overflow: 'hidden' };
   const listItemStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${colors.gray100}`, transition: `background ${transitions.fast}` };
   const listItemMobileStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: `${spacing.md} ${spacing.lg}`, borderBottom: `1px solid ${colors.gray100}`, transition: `background ${transitions.fast}`, gap: spacing.md };
@@ -364,16 +394,8 @@ export const FriendsPage = () => {
   const modalActionsStyle: React.CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: spacing.sm, flexWrap: isMobile ? 'wrap' : 'nowrap' };
   const modalButtonCancelStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, backgroundColor: colors.white, color: colors.gray700, border: `1px solid ${colors.gray300}`, borderRadius: borderRadius.md, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, cursor: 'pointer', transition: `all ${transitions.normal}`, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
   const modalButtonDeleteStyle: React.CSSProperties = { padding: `${spacing.sm} ${spacing.lg}`, backgroundColor: colors.error, color: colors.white, border: 'none', borderRadius: borderRadius.md, fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, cursor: 'pointer', transition: `all ${transitions.normal}`, flex: isMobile ? '1' : 'auto', justifyContent: 'center' };
-  const chatModalOverlayStyle: React.CSSProperties = { 
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-    backgroundColor: 'rgba(0, 0, 0, 0.6)', 
-    display: 'flex', alignItems: 'center', justifyContent: 'center', 
-    zIndex: 3000, animation: 'fadeIn 0.2s ease', padding: spacing.lg 
-  };
-  const chatModalContentStyle: React.CSSProperties = { 
-    width: '100%', maxWidth: '600px', height: '80vh', maxHeight: '700px', 
-    animation: 'slideInUp 0.3s ease' 
-  };
+  const chatModalOverlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, animation: 'fadeIn 0.2s ease', padding: spacing.lg };
+  const chatModalContentStyle: React.CSSProperties = { width: '100%', maxWidth: '600px', height: '80vh', maxHeight: '700px', animation: 'slideInUp 0.3s ease' };
 
   const renderAvatar = (name: string, size: 'sm' | 'md' | 'lg' = 'md') => {
     const sizeMap = { sm: 32, md: isMobile ? 36 : 40, lg: 48 };
@@ -411,7 +433,7 @@ export const FriendsPage = () => {
       <div style={sectionBodyStyle}>
         {friendsList.length === 0 ? (
           <div style={emptyStateStyle}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="1.5" style={{ margin: '0 auto' }}><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="1.5" style={{ margin: '0 auto' }}><circle cx="12" cy="7" r="4" /><path d="M5.5 21a6.5 6.5 0 0 1 13 0" /></svg>
             <p style={{ marginTop: spacing.md }}>Пока нет друзей</p>
             <button onClick={() => setActiveSection('add')} style={{ ...buttonPrimaryStyle, marginTop: spacing.md }}>Добавить друга</button>
           </div>
@@ -419,7 +441,6 @@ export const FriendsPage = () => {
           <div style={listStyle}>
             {friendsList.map((friend) => {
               const friendName = getFriendName(friend);
-        
               return (
                 <div key={friend.friendId} style={isMobile ? listItemMobileStyle : listItemStyle}>
                   <div style={listItemLeftStyle}>
@@ -441,75 +462,46 @@ export const FriendsPage = () => {
                       </div>
                     </div>
                   </div>
-                  
                   <div style={isMobile ? actionButtonsMobileStyle : actionButtonsStyle}>
-                    
-                    {/* 🎨 Кнопка "Расписание" — outline стиль, цвет info */}
-                    <button 
-                      style={getFriendActionButtonStyle('schedule', isLoading)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setScheduleModal({
-                          isOpen: true,
-                          friendId: friend.friendId,
-                          friendName: friendName,
-                        });
-                      }}
-                      disabled={isLoading}
-                      title="Посмотреть расписание"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="16" y1="2" x2="16" y2="6"/>
-                        <line x1="8" y1="2" x2="8" y2="6"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                      </svg>
+                    <button style={getFriendActionButtonStyle('schedule', isLoading)} onClick={(e) => { e.stopPropagation(); setScheduleModal({ isOpen: true, friendId: friend.friendId, friendName: friendName }); }} disabled={isLoading} title="Посмотреть расписание">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                       {isMobile ? 'Расп.' : 'Расписание'}
                     </button>
-                    
-                    {/* 🎨 Кнопка "Чат" — outline стиль, цвет primary */}
-                    <button 
-                      style={getFriendActionButtonStyle('chat', isChatLoading || isLoading)}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          await openPersonalChat(friend.friendId, async (chatId) => {
-                            setActivePersonalChat({
-                              chatId,
-                              participantId: friend.friendId,
-                              participantName: friendName,
-                            });
-                          });
-                        } catch (err) {
-                          console.error('Failed to open chat:', err);
-                        }
-                      }}
-                      disabled={isChatLoading || isLoading}
-                      title="Открыть чат"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                      {isChatLoading ? '...' : (isMobile ? 'Чат' : 'Чат')}
+                    <button style={getFriendActionButtonStyle('chat', isChatLoading || isLoading)} onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await openPersonalChat(friend.friendId, async (chatId) => {
+                          setActivePersonalChat({ chatId, participantId: friend.friendId, participantName: friendName });
+                          markFriendChatAsViewed(friend.friendId); // 🆕 Помечаем как прочитанное при открытии
+                        });
+                      } catch (err) { console.error('Failed to open chat:', err); }
+                    }} disabled={isChatLoading || isLoading} title="Открыть чат">
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: spacing.xs }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                        {isChatLoading ? '...' : 'Чат'}
+                        {/* 🆕 Индикатор непрочитанных на кнопке — мягкая пульсация */}
+                        {unreadStatuses[friend.friendId] && (
+                          <span
+                            className="chat-unread-dot"
+                            style={{
+                              position: 'absolute',
+                              top: '-3px',
+                              right: '-6px',
+                              width: '6px',
+                              height: '6px',
+                              backgroundColor: colors.error,
+                              borderRadius: '50%',
+                              border: `1px solid ${colors.white}`,
+                              boxShadow: `0 0 0 1px ${colors.error}`,
+                            }}
+                          />
+                        )}
+                      </div>
                     </button>
-                    
-                    {/* 🎨 Кнопка "Удалить" — solid стиль, цвет error */}
-                    <button 
-                      style={getFriendActionButtonStyle('remove', isLoading)} 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveFriendClick(friend.friendId, friendName);
-                      }} 
-                      disabled={isLoading} 
-                      title="Удалить из друзей"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      </svg>
+                    <button style={getFriendActionButtonStyle('remove', isLoading)} onClick={(e) => { e.stopPropagation(); handleRemoveFriendClick(friend.friendId, friendName); }} disabled={isLoading} title="Удалить из друзей">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                       Удалить
                     </button>
-                    
                   </div>
                 </div>
               );
@@ -532,7 +524,7 @@ export const FriendsPage = () => {
       <div style={sectionBodyStyle}>
         {incomingList.length === 0 ? (
           <div style={emptyStateStyle}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="1.5" style={{ margin: '0 auto' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="1.5" style={{ margin: '0 auto' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>
             <p style={{ marginTop: spacing.md }}>Нет входящих заявок</p>
           </div>
         ) : (
@@ -544,7 +536,7 @@ export const FriendsPage = () => {
                   <div style={listItemContentStyle}>
                     <div style={listItemTitleStyle}>{getInviteName(invite, true)}</div>
                     <div style={listItemDescriptionStyle}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.primary} strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" /></svg>
                       Хочет добавить вас в друзья
                     </div>
                   </div>
@@ -573,7 +565,7 @@ export const FriendsPage = () => {
       <div style={sectionBodyStyle}>
         {outgoingList.length === 0 ? (
           <div style={emptyStateStyle}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="1.5" style={{ margin: '0 auto' }}><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="1.5" style={{ margin: '0 auto' }}><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /></svg>
             <p style={{ marginTop: spacing.md }}>Нет исходящих заявок</p>
           </div>
         ) : (
@@ -585,7 +577,7 @@ export const FriendsPage = () => {
                   <div style={listItemContentStyle}>
                     <div style={listItemTitleStyle}>{getInviteName(invite, false)}</div>
                     <div style={listItemDescriptionStyle}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.gray400} strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.gray400} strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                       Ожидает подтверждения
                     </div>
                   </div>
@@ -614,7 +606,7 @@ export const FriendsPage = () => {
             <div style={inputGroupStyle}>
               <label style={inputLabelStyle}>Имя пользователя</label>
               <div style={inputWrapperStyle}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.gray400} strokeWidth="2" style={{ marginRight: spacing.sm }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.gray400} strokeWidth="2" style={{ marginRight: spacing.sm }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                 <input type="text" placeholder="Например: ivan_ivanov" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} style={inputStyle} disabled={isLoading} />
               </div>
             </div>
@@ -656,15 +648,11 @@ export const FriendsPage = () => {
 
   return (
     <div style={containerStyle}>
-      {isMobile && isSidebarOpen && (
-        <div style={overlayStyle} onClick={() => setIsSidebarOpen(false)} />
-      )}
+      {isMobile && isSidebarOpen && (<div style={overlayStyle} onClick={() => setIsSidebarOpen(false)} />)}
       {isMobile && (
         <header style={mobileHeaderStyle}>
           <button style={menuButtonStyle} onClick={() => setIsSidebarOpen(!isSidebarOpen)} aria-label="Меню">
-            <span style={menuBarStyle} />
-            <span style={menuBarStyle} />
-            <span style={menuBarStyle} />
+            <span style={menuBarStyle} /><span style={menuBarStyle} /><span style={menuBarStyle} />
           </button>
           <h1 style={{ ...pageTitleStyle, margin: 0, fontSize: typography.fontSize.lg }}>Друзья</h1>
           <div style={{ width: '40px' }} />
@@ -680,22 +668,22 @@ export const FriendsPage = () => {
         <aside style={sidebarStyle}>
           <nav style={navMenuStyle}>
             <button style={getNavMenuItemStyle(activeSection === 'friends')} onClick={() => setActiveSection('friends')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
               Мои друзья
               {friendsTotalCount > 0 && (<span style={getBadgeStyle(friendsTotalCount)}>{friendsTotalCount}</span>)}
             </button>
             <button style={getNavMenuItemStyle(activeSection === 'incoming')} onClick={() => setActiveSection('incoming')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>
               Входящие
               {incomingTotalCount > 0 && (<span style={getBadgeStyle(incomingTotalCount)}>{incomingTotalCount}</span>)}
             </button>
             <button style={getNavMenuItemStyle(activeSection === 'outgoing')} onClick={() => setActiveSection('outgoing')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /></svg>
               Исходящие
               {outgoingTotalCount > 0 && (<span style={getBadgeStyle(outgoingTotalCount)}>{outgoingTotalCount}</span>)}
             </button>
             <button style={getNavMenuItemStyle(activeSection === 'add')} onClick={() => setActiveSection('add')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" /></svg>
               Добавить
             </button>
           </nav>
@@ -718,7 +706,7 @@ export const FriendsPage = () => {
           {isLoading && (
             <div style={sectionCardStyle}>
               <div style={emptyStateStyle}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="2" style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }}><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={colors.gray300} strokeWidth="2" style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }}><circle cx="12" cy="12" r="10" /><path d="M12 2a10 10 0 0 1 10 10" /></svg>
                 <p style={{ marginTop: spacing.md }}>Загрузка...</p>
               </div>
             </div>
@@ -729,13 +717,13 @@ export const FriendsPage = () => {
           {!isLoading && activeSection === 'add' && renderAddFriend()}
         </main>
       </div>
-      
+
       {deleteModal.isOpen && (
         <div style={modalOverlayStyle} onClick={handleDeleteCancel}>
           <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
               <div style={modalIconStyle}>
-                <svg style={modalIconSvgStyle} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <svg style={modalIconSvgStyle} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               </div>
               <h3 style={modalTitleStyle}>{getModalTitle()}</h3>
             </div>
@@ -749,13 +737,14 @@ export const FriendsPage = () => {
         </div>
       )}
 
+      {/* 🆕 Модальное окно чата с обработчиком закрытия */}
       {activePersonalChat && user?.name && (
-        <div style={chatModalOverlayStyle} onClick={() => setActivePersonalChat(null)}>
+        <div style={chatModalOverlayStyle} onClick={handleClosePersonalChat}>
           <div style={chatModalContentStyle} onClick={(e) => e.stopPropagation()}>
             <ChatWindow
               chatId={activePersonalChat.chatId}
               currentUsername={user.name}
-              onClose={() => setActivePersonalChat(null)}
+              onClose={handleClosePersonalChat}
               chatTitle={activePersonalChat.participantName}
               isPersonal={true}
               participantId={activePersonalChat.participantId}
@@ -776,6 +765,14 @@ export const FriendsPage = () => {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes subtlePulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.45; transform: scale(0.85); }
+        }
+        .chat-unread-dot {
+          animation: subtlePulse 2.4s ease-in-out infinite;
+          pointer-events: none;
+        }
         button:focus { outline: none !important; }
         @media (max-width: 767px) { input, select, textarea { font-size: 16px !important; } }
       `}</style>

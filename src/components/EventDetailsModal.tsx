@@ -8,6 +8,7 @@ import { FriendsSelectorForEvent } from './FriendsSelectorForEvent';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { config } from '../config/env';
+import { chatsClient } from '../api/chats/ChatsClient';
 
 const API_BASE_URL = config.apiUrl;
 const LIVEKIT_SERVER_URL = config.liveServerUrl;
@@ -31,29 +32,78 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
-  
   const [isVideoCallOpen, setIsVideoCallOpen] = useState(false);
   const [videoToken, setVideoToken] = useState<string | null>(null);
   const [isTokenLoading, setIsTokenLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
-
   const [confirmDeleteModal, setConfirmDeleteModal] = useState<{
     isOpen: boolean;
     participantId: string | null;
     participantUsername: string | null;
   }>({ isOpen: false, participantId: null, participantUsername: null });
-
   const [addMemberModal, setAddMemberModal] = useState<{
     isOpen: boolean;
     isLoading: boolean;
   }>({ isOpen: false, isLoading: false });
 
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+
+  const checkEventChatUpdates = async (chatId: string) => {
+    if (!user?.accessToken) return;
+
+    try {
+      const response = await chatsClient.checkUpdates(user.accessToken, chatId);
+      const hasUpdates = response.updates?.[0]?.hasUpdates ?? false;
+      setHasUnreadMessages(hasUpdates);
+    } catch (err) {
+      console.error('Failed to check event chat updates:', err);
+      setHasUnreadMessages(false);
+    }
+  };
+
+  const markEventChatAsViewed = async (chatId: string) => {
+    if (!user?.accessToken) return;
+
+    try {
+      await chatsClient.markAsViewed(user.accessToken, chatId);
+      setHasUnreadMessages(false);
+    } catch (err) {
+      console.error('Failed to mark event chat as viewed:', err);
+    }
+  };
+
+  // ✅ НОВАЯ ФУНКЦИЯ: закрытие чата с отправкой MarkAsRead
+  const handleCloseChat = async () => {
+    const chatId = getChatId();
+    if (chatId && user?.accessToken) {
+      try {
+        await markEventChatAsViewed(chatId);
+      } catch (err) {
+        console.error('Failed to mark chat as viewed on close:', err);
+      }
+    }
+    setIsChatOpen(false);
+  };
+
   useEffect(() => {
     if (isOpen && eventId) {
       setIsLoadingDetails(true);
       setEventDetails(null);
+      setHasUnreadMessages(false);
+
       getEventDetails(eventId)
-        .then(data => setEventDetails(data))
+        .then(async (data) => {
+          setEventDetails(data);
+          if (data?.chatId) {
+            const isUserParticipant =
+              data.initiator.username === user?.name ||
+              data.members?.some(m => m.username === user?.name);
+
+            if (isUserParticipant) {
+              await checkEventChatUpdates(data.chatId);
+            }
+          }
+        })
         .catch(err => console.error('Failed to load event details:', err))
         .finally(() => setIsLoadingDetails(false));
     }
@@ -61,16 +111,26 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
+      // ✅ Если чат был открыт — помечаем как прочитанный перед сбросом
+      if (isChatOpen) {
+        const chatId = eventDetails?.chatId;
+        if (chatId && user?.accessToken) {
+          markEventChatAsViewed(chatId).catch(err =>
+            console.error('Failed to mark chat as viewed on modal close:', err)
+          );
+        }
+      }
       setIsChatOpen(false);
       setIsVideoCallOpen(false);
       setVideoToken(null);
       setVideoError(null);
       setConfirmDeleteModal({ isOpen: false, participantId: null, participantUsername: null });
       setAddMemberModal({ isOpen: false, isLoading: false });
+      setHasUnreadMessages(false);
     }
   }, [isOpen]);
 
-  // ✅ MutationObserver для перевода LiveKit, скрытия кнопки выхода и встроенного чата
+  // ... (MutationObserver для LiveKit остаётся без изменений)
   useEffect(() => {
     if (!isVideoCallOpen) return;
 
@@ -109,7 +169,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
       if (node.nodeType === Node.ELEMENT_NODE) {
         const el = node as HTMLElement;
         if (!el.closest('[data-lk-theme]')) return;
-        
+
         ['aria-label', 'title', 'placeholder'].forEach(attr => {
           const val = el.getAttribute(attr);
           if (val && translations[val]) {
@@ -119,19 +179,16 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
         const ariaLabel = el.getAttribute('aria-label');
 
-        // ✅ Скрываем кнопку выхода LiveKit
         if (ariaLabel === 'Leave' || ariaLabel === 'Покинуть') {
           el.style.display = 'none';
         }
 
-        // ✅ Скрываем кнопку встроенного чата LiveKit
         if (ariaLabel === 'Chat' || ariaLabel === 'Чат') {
-          // Проверяем, что это именно элемент LiveKit, а не наш кастомный чат
           if (el.closest('.lk-control-bar') || el.closest('.lk-button') || el.closest('[class*="lk-"]')) {
             el.style.display = 'none';
           }
         }
-      } 
+      }
       else if (node.nodeType === Node.TEXT_NODE) {
         if (!node.parentElement?.closest('[data-lk-theme]')) return;
         const text = node.textContent?.trim();
@@ -205,7 +262,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     const startDate = new Date(start);
     const endDate = new Date(end);
     const sameDay = startDate.toDateString() === endDate.toDateString();
-    
     const dateStr = startDate.toLocaleDateString('ru-RU', {
       day: 'numeric',
       month: 'long',
@@ -237,12 +293,11 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
       isOrganizer: true,
       isCurrentUser: isCurrentUser(eventDetails.initiator.username),
     };
-
     const otherMembers = (eventDetails.members || [])
       .filter(m => m.username !== eventDetails.initiator.username)
-      .map(m => ({ 
+      .map(m => ({
         id: m.userId,
-        ...m, 
+        ...m,
         isOrganizer: false,
         isCurrentUser: isCurrentUser(m.username),
       }));
@@ -254,7 +309,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     eventDetails.initiator.username === user?.name ||
     eventDetails.members?.some(m => m.username === user?.name)
   );
-  
+
   const isInitiator = eventDetails && eventDetails.initiator.username === user?.name;
   const hasChat = eventDetails?.chatId !== null && eventDetails?.chatId !== undefined;
 
@@ -262,7 +317,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     if (!eventId || !user?.name || !user?.accessToken) return;
     setIsTokenLoading(true);
     setVideoError(null);
-
     try {
       const response = await fetch(
         `${API_BASE_URL}/v1/videos/token?roomName=${encodeURIComponent(eventId)}`,
@@ -300,16 +354,38 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     }
   };
 
-  const handleCloseVideoCall = () => {
+  // ✅ ОБНОВЛЁННАЯ ФУНКЦИЯ: при выходе из звонка помечаем чат как прочитанный
+  // (если он был открыт) и проверяем обновления чата
+  const handleCloseVideoCall = async () => {
+    const chatId = getChatId();
+
+    // Если чат был открыт во время звонка — помечаем как прочитанный
+    if (isChatOpen && chatId && user?.accessToken) {
+      try {
+        await markEventChatAsViewed(chatId);
+      } catch (err) {
+        console.error('Failed to mark chat as viewed on call close:', err);
+      }
+    }
+
     setIsVideoCallOpen(false);
-    setIsChatOpen(false); // ✅ Закрываем чат при выходе из звонка
+    setIsChatOpen(false);
     setVideoToken(null);
+    setVideoError(null);
+
+    // ✅ Проверяем обновления чата после выхода из звонка
+    if (chatId && user?.accessToken) {
+      try {
+        await checkEventChatUpdates(chatId);
+      } catch (err) {
+        console.error('Failed to check chat updates after call:', err);
+      }
+    }
   };
 
   const handleConfirmRemoveMember = async () => {
     const { participantId } = confirmDeleteModal;
     if (!participantId || !eventId) return;
-
     setRemovingMemberId(participantId);
     try {
       await removeMember(eventId, participantId);
@@ -425,8 +501,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               </svg>
             </div>
             <div>
-              <div style={{ 
-                fontSize: typography.fontSize.base, 
+              <div style={{
+                fontSize: typography.fontSize.base,
                 fontWeight: typography.fontWeight.bold,
                 color: colors.white,
               }}>
@@ -442,12 +518,22 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             </div>
           </div>
 
-          {/* ✅ Группа кнопок: Чат + Отключиться */}
           <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'center' }}>
-            {/* ✅ Кнопка открытия/закрытия кастомного чата */}
             {hasChat && user?.accessToken && (
               <button
-                onClick={() => setIsChatOpen(prev => !prev)}
+                onClick={async () => {
+                  const willOpen = !isChatOpen;
+                  if (willOpen) {
+                    setIsChatOpen(true);
+                    const chatId = getChatId();
+                    if (chatId) {
+                      await markEventChatAsViewed(chatId);
+                    }
+                  } else {
+                    // ✅ При закрытии чата из звонка — помечаем как прочитанный
+                    await handleCloseChat();
+                  }
+                }}
                 title={isChatOpen ? 'Закрыть чат' : 'Открыть чат'}
                 style={{
                   background: isChatOpen
@@ -465,6 +551,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   gap: spacing.sm,
                   boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
                   transition: `all ${transitions.fast}`,
+                  position: 'relative',
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
@@ -479,6 +566,19 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
                 {isChatOpen ? 'Закрыть чат' : 'Чат'}
+                {hasUnreadMessages && !isChatOpen && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    width: '10px',
+                    height: '10px',
+                    backgroundColor: colors.error,
+                    borderRadius: '50%',
+                    border: '2px solid #1f2937',
+                    boxShadow: '0 0 0 1px ' + colors.error,
+                  }} />
+                )}
               </button>
             )}
           </div>
@@ -487,12 +587,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         {/* LiveKit конференция */}
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           <style>{`
-            /* Кастомизация LiveKit */
             [data-lk-theme="default"] {
               --lk-color-background: #111827;
             }
-            
-            /* ✅ Скрываем стандартную кнопку выхода LiveKit (максимально надёжно) */
+
             [data-lk-theme] [aria-label="Leave"],
             [data-lk-theme] [aria-label="Покинуть"],
             [data-lk-theme] [title="Leave"],
@@ -507,7 +605,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               pointer-events: none !important;
             }
 
-            /* ✅ Скрываем встроенный чат LiveKit (кнопку-переключатель и саму панель) */
             [data-lk-theme] .lk-chat-toggle,
             [data-lk-theme] .lk-chat,
             [data-lk-theme] .lk-chat-trigger {
@@ -526,47 +623,42 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               border-radius: 12px !important;
               transition: all 0.2s ease !important;
             }
-            
+
             .lk-button:hover {
               background-color: #4b5563 !important;
               border-color: #6b7280 !important;
               transform: scale(1.05) !important;
             }
-            
+
             .lk-button[data-lk-muted='true'] {
               background-color: #ef4444 !important;
               border-color: #dc2626 !important;
             }
-            
-            /* ✅ ИСПРАВЛЕНИЕ: Повышаем специфичность, чтобы LiveKit не перезаписал стили при перерасчете */
+
             [data-lk-theme="default"] .lk-control-bar {
               background-color: rgba(31, 41, 55, 0.95) !important;
               backdrop-filter: blur(10px) !important;
               border: 1px solid #374151 !important;
               padding: 16px !important;
               border-radius: 16px !important;
-              
-              /* Точный отступ: 16px снизу, 16px по бокам, 0 сверху */
-              margin: 0 16px 16px 16px !important; 
+              margin: 0 16px 16px 16px !important;
               width: calc(100% - 32px) !important;
               box-sizing: border-box !important;
-              
-              /* Страховка, если LiveKit использует абсолютное позиционирование */
-              bottom: 16px !important; 
+              bottom: 16px !important;
             }
 
             [data-lk-theme="default"] .lk-footer {
               padding: 0 !important;
               margin: 0 !important;
             }
-            
+
             .lk-participant-tile {
               border-radius: 16px !important;
               overflow: hidden !important;
               box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
             }
           `}</style>
-          
+
           <LiveKitRoom
             serverUrl={LIVEKIT_SERVER_URL}
             token={videoToken}
@@ -579,7 +671,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             <VideoConference />
           </LiveKitRoom>
 
-          {/* ✅ Оверлей кастомного чата прямо во время видеозвонка */}
           {isChatOpen && hasChat && getChatId() && (
             <div
               style={{
@@ -598,7 +689,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             >
               <ChatWindow
                 chatId={getChatId()!}
-                onClose={() => setIsChatOpen(false)}
+                onClose={handleCloseChat}
                 currentUsername={user?.name || ''}
                 readOnly={isEventPassed}
               />
@@ -616,7 +707,6 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
       setIsChatOpen(false);
       return null;
     }
-
     return (
       <div
         style={{
@@ -644,7 +734,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         >
           <ChatWindow
             chatId={chatId}
-            onClose={() => setIsChatOpen(false)}
+            onClose={handleCloseChat}
             currentUsername={user?.name || ''}
             readOnly={isEventPassed}
           />
@@ -830,12 +920,12 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             <div style={{
               marginBottom: spacing.lg,
               padding: spacing.md,
-              backgroundColor: isEventPassed 
-                ? colors.gray100 
+              backgroundColor: isEventPassed
+                ? colors.gray100
                 : colors.successLight,
               borderRadius: borderRadius.md,
-              border: `1px solid ${isEventPassed 
-                ? colors.gray300 
+              border: `1px solid ${isEventPassed
+                ? colors.gray300
                 : colors.success}`,
             }}>
               <div style={{
@@ -853,8 +943,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   fontWeight: typography.fontWeight.semibold,
                   color: isEventPassed ? colors.gray600 : colors.successDark,
                 }}>
-                  {isEventPassed 
-                    ? 'Видеозвонок (недоступен)' 
+                  {isEventPassed
+                    ? 'Видеозвонок (недоступен)'
                     : 'Видеозвонок'}
                 </span>
               </div>
@@ -957,10 +1047,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 ))
               ) : (
                 getParticipantsList().map((participant, index) => {
-                  const canRemoveMember = !participant.isOrganizer 
-                     && !participant.isCurrentUser 
-                     && isInitiator 
-                     && !isEventPassed;
+                  const canRemoveMember = !participant.isOrganizer
+                    && !participant.isCurrentUser
+                    && isInitiator
+                    && !isEventPassed;
 
                   return (
                     <div
@@ -981,10 +1071,10 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                             <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
                           </svg>
                         )}
-                        <div style={{ 
-                          fontSize: typography.fontSize.sm, 
-                          fontWeight: participant.isOrganizer ? typography.fontWeight.bold : typography.fontWeight.medium, 
-                          color: participant.isOrganizer ? colors.primary : colors.gray900 
+                        <div style={{
+                          fontSize: typography.fontSize.sm,
+                          fontWeight: participant.isOrganizer ? typography.fontWeight.bold : typography.fontWeight.medium,
+                          color: participant.isOrganizer ? colors.primary : colors.gray900
                         }}>
                           {participant.username}
                           {participant.isCurrentUser && (
@@ -1004,7 +1094,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                           <span style={{
                             padding: `${spacing.xs} ${spacing.sm}`,
                             backgroundColor: colors.primary,
-                            color: colors.white, 
+                            color: colors.white,
                             borderRadius: borderRadius.full,
                             fontSize: typography.fontSize.xs,
                             fontWeight: typography.fontWeight.semibold,
@@ -1029,7 +1119,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                             );
                           })()
                         )}
-                        
+
                         {canRemoveMember && (
                           <button
                             onClick={(e) => {
@@ -1093,7 +1183,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   );
                 })
               )}
-              
+
               {isInitiator && !isEventPassed && (
                 <button
                   onClick={(e) => {
@@ -1150,7 +1240,8 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               padding: spacing.md,
               backgroundColor: isEventPassed ? colors.gray100 : colors.primary + '10',
               borderRadius: borderRadius.md,
-              border: `1px solid ${isEventPassed ? colors.gray300 : colors.primary}`,
+              border: `1px solid ${hasUnreadMessages && !isEventPassed ? colors.error : (isEventPassed ? colors.gray300 : colors.primary)}`,
+              transition: `border-color ${transitions.fast}`,
             }}>
               <div style={{
                 display: 'flex',
@@ -1168,6 +1259,26 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 }}>
                   {isEventPassed ? 'Чат встречи (архив)' : 'Чат встречи'}
                 </span>
+                {hasUnreadMessages && !isEventPassed && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    padding: '2px 8px',
+                    backgroundColor: colors.error,
+                    color: colors.white,
+                    borderRadius: borderRadius.full,
+                    fontSize: '11px',
+                    fontWeight: typography.fontWeight.bold,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    animation: 'pulse 2s ease-in-out infinite',
+                  }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="12" r="10" />
+                    </svg>
+                    Непрочитано
+                  </span>
+                )}
               </div>
 
               {isEventPassed && (
@@ -1183,7 +1294,13 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
               )}
 
               <button
-                onClick={() => setIsChatOpen(true)}
+                onClick={async () => {
+                  setIsChatOpen(true);
+                  const chatId = getChatId();
+                  if (chatId) {
+                    await markEventChatAsViewed(chatId);
+                  }
+                }}
                 disabled={!user?.accessToken}
                 style={{
                   width: '100%',
@@ -1201,11 +1318,12 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: spacing.sm,
+                  position: 'relative',
                 }}
                 onMouseOver={(e) => {
                   if (user?.accessToken) {
-                    e.currentTarget.style.backgroundColor = isEventPassed 
-                      ? (colors.gray600 || '#555') 
+                    e.currentTarget.style.backgroundColor = isEventPassed
+                      ? (colors.gray600 || '#555')
                       : (colors.primaryDark || '#0056b3');
                   }
                 }}
@@ -1219,6 +1337,27 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
                 {isEventPassed ? 'Читать' : 'Открыть'}
+                {hasUnreadMessages && !isEventPassed && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    minWidth: '18px',
+                    height: '18px',
+                    backgroundColor: colors.error,
+                    color: colors.white,
+                    borderRadius: '50%',
+                    fontSize: '10px',
+                    fontWeight: typography.fontWeight.bold,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid ' + colors.white,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                  }}>
+                    !
+                  </span>
+                )}
               </button>
             </div>
           )}
@@ -1464,7 +1603,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
           from { opacity: 0; }
           to { opacity: 1; }
         }
-        
+
         @keyframes slideIn {
           from {
             opacity: 0;
@@ -1486,12 +1625,12 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             transform: translateX(0);
           }
         }
-        
+
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; } 
+          50% { opacity: 0.5; }
         }
-        
+
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }

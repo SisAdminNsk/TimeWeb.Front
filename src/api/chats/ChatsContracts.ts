@@ -35,6 +35,16 @@ export interface GetPersonalChatResponse{
     chatId: string
 }
 
+export interface CheckUpdatesResponse{
+  updates: ChatUpdatesDto[]
+}
+
+export interface ChatUpdatesDto{
+  chatId: string
+  hasUpdates: boolean
+  unreadCount: number
+}
+
 export interface VoiceParticipant {
   userId: string;
   username: string;
